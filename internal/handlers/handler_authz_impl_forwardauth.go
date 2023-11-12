@@ -33,29 +33,46 @@ func handleAuthzGetObjectForwardAuth(ctx *middlewares.AutheliaCtx) (object autho
 	return authorization.NewObjectRaw(targetURL, method), nil
 }
 
+// Forward Auth
 func handleAuthzUnauthorizedForwardAuth(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL) {
 	var (
 		statusCode int
 	)
 
-	switch {
-	case ctx.IsXHR() || !ctx.AcceptsMIME("text/html"):
+	ctx.Logger.Infof("Using: FORWARD AUTH METHOD") // REMOVE
+
+	// Checks if request is expecting html or is from a browser
+	if isRenderingHTML(ctx) {
 		statusCode = fasthttp.StatusUnauthorized
-	default:
-		switch authn.Object.Method {
-		case fasthttp.MethodGet, fasthttp.MethodOptions, fasthttp.MethodHead:
-			statusCode = fasthttp.StatusFound
-		default:
-			statusCode = fasthttp.StatusSeeOther
-		}
+	} else {
+		statusCode = determineStatusCodeFromAuthn(authn)
 	}
 
-	ctx.Logger.Infof(logFmtAuthzRedirect, authn.Object.String(), authn.Method, authn.Username, statusCode, redirectionURL)
+	// Checks if request is expecting html or is from a browser
+	// switch {
+	// case ctx.IsXHR() || !ctx.AcceptsMIME("text/html"):
+	// 	statusCode = fasthttp.StatusUnauthorized
+	// default:
+	// 	// determine redirect type
+	// 	switch authn.Object.Method {
+	// 	case fasthttp.MethodGet, fasthttp.MethodOptions, fasthttp.MethodHead:
+	// 		statusCode = fasthttp.StatusFound
+	// 	default:
+	// 		statusCode = fasthttp.StatusSeeOther
+	// 	}
+	// }
 
-	switch authn.Object.Method {
-	case fasthttp.MethodHead:
-		ctx.SpecialRedirectNoBody(redirectionURL.String(), statusCode)
-	default:
-		ctx.SpecialRedirect(redirectionURL.String(), statusCode)
-	}
+	handleSpecialRedirect(ctx, authn,redirectionURL, statusCode)
+
+	// ctx.Logger.Infof(logFmtAuthzRedirect, authn.Object.String(), authn.Method, authn.Username, statusCode, redirectionURL)
+
+	// // NOTE :) 401 Redirects
+
+	// // Special Redirect Handling
+	// switch authn.Object.Method {
+	// case fasthttp.MethodHead:
+	// 	ctx.SpecialRedirectNoBody(redirectionURL.String(), statusCode)
+	// default:
+	// 	ctx.SpecialRedirect(redirectionURL.String(), statusCode)
+	// }
 }

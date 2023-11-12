@@ -36,13 +36,17 @@ func handleAuthzGetObjectAuthRequest(ctx *middlewares.AutheliaCtx) (object autho
 	return authorization.NewObjectRaw(targetURL, method), nil
 }
 
+// Auth Request
 func handleAuthzUnauthorizedAuthRequest(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL) {
-	ctx.Logger.Infof(logFmtAuthzRedirect, authn.Object.URL.String(), authn.Method, authn.Username, fasthttp.StatusUnauthorized, redirectionURL)
+	ctx.Logger.Infof("Using: AUTH REQUEST METHOD") // REMOVE
 
-	switch authn.Object.Method {
-	case fasthttp.MethodHead:
-		ctx.SpecialRedirectNoBody(redirectionURL.String(), fasthttp.StatusUnauthorized)
-	default:
-		ctx.SpecialRedirect(redirectionURL.String(), fasthttp.StatusUnauthorized)
-	}
+	handleSpecialRedirect(ctx, authn, redirectionURL, fasthttp.StatusUnauthorized)
+	// NOTE :) Redirections for 401
+	// Special Redirect Handling
+	// switch authn.Object.Method {
+	// case fasthttp.MethodHead:
+	// 	ctx.SpecialRedirectNoBody(redirectionURL.String(), fasthttp.StatusUnauthorized)
+	// default:
+	// 	ctx.SpecialRedirect(redirectionURL.String(), fasthttp.StatusUnauthorized)
+	// }
 }
