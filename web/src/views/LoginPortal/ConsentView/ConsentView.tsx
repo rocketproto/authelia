@@ -26,8 +26,9 @@ import { useUserInfoGET } from "@hooks/UserInfo";
 import LoginLayout from "@layouts/LoginLayout";
 import { ConsentGetResponseBody, acceptConsent, getConsentResponse, rejectConsent } from "@services/Consent";
 import LoadingPage from "@views/LoadingPage/LoadingPage";
+import { ComponentOrLoading } from "@root/views/Generic/ComponentOrLoading";
 
-export interface Props {}
+export interface Props { }
 
 function scopeNameToAvatar(id: string) {
     switch (id) {
@@ -278,19 +279,3 @@ const useStyles = makeStyles((theme: Theme) => ({
 
 export default ConsentView;
 
-interface ComponentOrLoadingProps {
-    ready: boolean;
-
-    children: ReactNode;
-}
-
-function ComponentOrLoading(props: ComponentOrLoadingProps) {
-    return (
-        <Fragment>
-            <div className={props.ready ? "hidden" : ""}>
-                <LoadingPage />
-            </div>
-            {props.ready ? props.children : null}
-        </Fragment>
-    );
-}

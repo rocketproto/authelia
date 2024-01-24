@@ -31,13 +31,13 @@ func handleAuthzGetObjectLegacy(ctx *middlewares.AutheliaCtx) (object authorizat
 	return authorization.NewObjectRaw(targetURL, method), nil
 }
 
-// Legacy Auth
+// Legacy Auth.
 func handleAuthzUnauthorizedLegacy(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL) {
 	var (
 		statusCode int
 	)
 
-	ctx.Logger.Infof("Using: LEGACY AUTH METHOD") // REMOVE
+	ctx.Logger.Infof("Using: LEGACY AUTH METHOD") // REMOVE.
 
 	if authn.Type == AuthnTypeAuthorization {
 		handleAuthzUnauthorizedAuthorizationBasic(ctx, authn)
@@ -45,7 +45,7 @@ func handleAuthzUnauthorizedLegacy(ctx *middlewares.AutheliaCtx, authn *Authn, r
 		return
 	}
 
-	// Checks if request is expecting html or is from a browser WITH URL CHECK
+	// Checks if request is expecting html or is from a browser WITH URL CHECK.
 	switch {
 	case isRenderingHTML(ctx) || redirectionURL == nil:
 		statusCode = fasthttp.StatusUnauthorized
@@ -72,13 +72,13 @@ func handleAuthzUnauthorizedLegacy(ctx *middlewares.AutheliaCtx, authn *Authn, r
 	// 	default:
 	// 		statusCode = fasthttp.StatusSeeOther
 	// 	}
-	// }
+	// }.
 
 	if redirectionURL != nil {
 		ctx.Logger.Infof(logFmtAuthzRedirect, authn.Object.URL.String(), authn.Method, authn.Username, statusCode, redirectionURL)
 
-		handleSpecialRedirect(ctx, authn,redirectionURL, statusCode)
-		// NOTE :) 401 Redirects
+		handleSpecialRedirect(ctx, authn, redirectionURL, statusCode)
+		// NOTE :) 401 Redirects.
 
 		// Special Redirect Handling
 		// switch authn.Object.Method {
@@ -86,9 +86,48 @@ func handleAuthzUnauthorizedLegacy(ctx *middlewares.AutheliaCtx, authn *Authn, r
 		// 	ctx.SpecialRedirectNoBody(redirectionURL.String(), statusCode)
 		// default:
 		// 	ctx.SpecialRedirect(redirectionURL.String(), statusCode)
-		// }
+		// }.
 	} else {
 		ctx.Logger.Infof("Access to %s (method %s) is not authorized to user %s, responding with status code %d", authn.Object.URL.String(), authn.Method, authn.Username, statusCode)
 		ctx.ReplyUnauthorized()
+	}
+}
+
+// Legacy Auth.
+func handleAuthzForbiddenLegacy(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL) {
+	var (
+		statusCode int
+	)
+
+	ctx.Logger.Infof("Using: LEGACY AUTH METHOD") // REMOVE.
+
+	if authn.Type == AuthnTypeAuthorization {
+		// handleAuthzUnauthorizedAuthorizationBasic(ctx, authn).
+
+		// Correct?
+		ctx.ReplyForbidden()
+		return
+	}
+
+	// Checks if request is expecting html or is from a browser WITH URL CHECK.
+	switch {
+	case isRenderingHTML(ctx) || redirectionURL == nil:
+		statusCode = fasthttp.StatusUnauthorized
+	default:
+		// Could this be more like :
+		// `statusCode = determineStatusCodeFromAuthn(authn, "", fasthttp.StatusFound)`
+		// and that be an addition to the switch case?
+		if authn.Object.Method == "" {
+			statusCode = fasthttp.StatusFound
+		} else {
+			statusCode = determineStatusCodeFromAuthn(authn)
+		}
+	}
+
+	if redirectionURL != nil {
+		handleSpecialRedirect(ctx, authn, redirectionURL, statusCode)
+	} else {
+		ctx.Logger.Infof("Access to %s (method %s) is forbidden for user %s, responding with status code %d", authn.Object.URL.String(), authn.Method, authn.Username, statusCode)
+		ctx.ReplyForbidden()
 	}
 }

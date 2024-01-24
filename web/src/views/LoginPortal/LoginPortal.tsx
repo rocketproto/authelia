@@ -24,6 +24,7 @@ import LoadingPage from "@views/LoadingPage/LoadingPage";
 import AuthenticatedView from "@views/LoginPortal/AuthenticatedView/AuthenticatedView";
 import FirstFactorForm from "@views/LoginPortal/FirstFactor/FirstFactorForm";
 import SecondFactorForm from "@views/LoginPortal/SecondFactor/SecondFactorForm";
+import { ComponentOrLoading } from "../Generic/ComponentOrLoading";
 
 export interface Props {
     duoSelfEnrollment: boolean;
@@ -228,23 +229,6 @@ const LoginPortal = function (props: Props) {
 };
 
 export default LoginPortal;
-
-interface ComponentOrLoadingProps {
-    ready: boolean;
-
-    children: ReactNode;
-}
-
-function ComponentOrLoading(props: ComponentOrLoadingProps) {
-    return (
-        <Fragment>
-            <div className={props.ready ? "hidden" : ""}>
-                <LoadingPage />
-            </div>
-            {props.ready ? props.children : null}
-        </Fragment>
-    );
-}
 
 function URLSearchParamsHasValues(params?: URLSearchParams) {
     return params ? !params.entries().next().done : false;

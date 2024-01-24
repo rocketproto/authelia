@@ -8,7 +8,7 @@ import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
 
 import NotificationBar from "@components/NotificationBar";
 import {
-    AccessDeniedRoute,
+    ErrorRoute,
     ConsentRoute,
     IndexRoute,
     LogoutRoute,
@@ -30,7 +30,7 @@ import {
 } from "@utils/Configuration";
 import RegisterOneTimePassword from "@views/DeviceRegistration/RegisterOneTimePassword";
 import RegisterWebAuthn from "@views/DeviceRegistration/RegisterWebAuthn";
-import AccessDeniedView from "@views/AccessDenied/AccessDeniedPage";
+import BaseErrorView from "./views/Error/BaseErrorPage";
 import BaseLoadingPage from "@views/LoadingPage/BaseLoadingPage";
 import ConsentView from "@views/LoginPortal/ConsentView/ConsentView";
 import LoginPortal from "@views/LoginPortal/LoginPortal";
@@ -95,7 +95,7 @@ const App: React.FC<Props> = (props: Props) => {
                                 <Route path={RegisterOneTimePasswordRoute} element={<RegisterOneTimePassword />} />
                                 <Route path={LogoutRoute} element={<SignOut />} />
                                 <Route path={ConsentRoute} element={<ConsentView />} />
-                                <Route path={AccessDeniedRoute} element={<AccessDeniedView />} />
+                                <Route path={ErrorRoute} element={<BaseErrorView />} />
                                 <Route
                                     path={`${IndexRoute}*`}
                                     element={

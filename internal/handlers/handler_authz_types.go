@@ -23,12 +23,16 @@ type Authz struct {
 
 	handleAuthorized   HandlerAuthzAuthorized
 	handleUnauthorized HandlerAuthzUnauthorized
+	handleForbidden    HandlerAuthzForbidden
 
 	implementation AuthzImplementation
 }
 
 // HandlerAuthzUnauthorized is a Authz handler func that handles unauthorized responses.
 type HandlerAuthzUnauthorized func(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL)
+
+// HandlerAuthzUnauthorized is a Authz handler func that handles unauthorized responses.
+type HandlerAuthzForbidden func(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL)
 
 // HandlerAuthzAuthorized is a Authz handler func that handles authorized responses.
 type HandlerAuthzAuthorized func(ctx *middlewares.AutheliaCtx, authn *Authn)
@@ -117,7 +121,7 @@ type AuthzImplementation int
 const (
 	AuthnStrategyCookieSession                       = "CookieSession"
 	AuthnStrategyHeaderAuthorization                 = "HeaderAuthorization"
-	AuthnStrategyHeaderProxyAuthorization            = "HeaderProxyAuthorization" //nolint:gosec
+	AuthnStrategyHeaderProxyAuthorization            = "HeaderProxyAuthorization" 
 	AuthnStrategyHeaderAuthRequestProxyAuthorization = "HeaderAuthRequestProxyAuthorization"
 	AuthnStrategyHeaderLegacy                        = "HeaderLegacy"
 )

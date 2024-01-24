@@ -49,6 +49,7 @@ const (
 	queryArgConsentID  = "consent_id"
 	queryArgWorkflow   = "workflow"
 	queryArgWorkflowID = "workflow_id"
+	queryArgEC         = "ec"
 )
 
 var (
@@ -56,6 +57,14 @@ var (
 	qryArgRD        = []byte(queryArgRD)
 	qryArgAuth      = []byte(queryArgAuth)
 	qryArgConsentID = []byte(queryArgConsentID)
+)
+
+var (
+	baseErrorPath = "error"
+)
+
+var (
+	errorForbidden = "forbidden"
 )
 
 var (
@@ -89,7 +98,8 @@ const (
 )
 
 const (
-	logFmtAuthzRedirect = "Access to %s (method %s) is not authorized to user %s, responding with status code %d with location redirect to %s"
+	logFmtAuthzRedirect = "YES Access to %s (method %s) is not authorized to user %s, responding with status code %d with location redirect to %s"
+	// EG: Access to https://singlefactor.example.com:8080/secret.html (method GET) is not authorized to user <anonymous>, responding with status code 401 with location redirect to https://login.example.com:8080/?rd=https%3A%2F%2Fsinglefactor.example.com%3A8080%2Fsecret.html&rm=GET" method=GET path=/api/authz/auth-request.
 
 	logFmtAuthorizationPrefix = "Authorization Request with id '%s' on client with id '%s' "
 

@@ -66,7 +66,7 @@ func (authz *Authz) Handler(ctx *middlewares.AutheliaCtx) {
 		case nil:
 			ctx.ReplyUnauthorized()
 		default:
-			strategy.HandleUnauthorized(ctx, &authn, authz.getRedirectionURL(&object, autheliaURL))
+			strategy.HandleUnauthorized(ctx, &authn, authz.getLoginRedirectionURL(&object, autheliaURL))
 		}
 
 		return
@@ -86,8 +86,20 @@ func (authz *Authz) Handler(ctx *middlewares.AutheliaCtx) {
 
 	switch isAuthzResult(authn.Level, required, ruleHasSubject) {
 	case AuthzResultForbidden:
-		ctx.Logger.Infof("Access to '%s' is forbidden to user '%s'", object.URL.String(), authn.Username)
-		ctx.ReplyForbidden()
+
+		// // NOTE :) Forbidden handling.
+		// ctx.Logger.Infof("Access to '%s' is forbidden to user '%s'", object.URL.String(), authn.Username)
+		// ctx.ReplyForbidden().
+
+		var handler HandlerAuthzForbidden
+
+		if strategy != nil {
+			handler = strategy.HandleUnauthorized // ????
+		} else {
+			handler = authz.handleForbidden
+		}
+
+		handler(ctx, &authn, authz.getAccessDeniedRedirection(&object, autheliaURL))
 	case AuthzResultUnauthorized:
 		var handler HandlerAuthzUnauthorized
 
@@ -97,7 +109,7 @@ func (authz *Authz) Handler(ctx *middlewares.AutheliaCtx) {
 			handler = authz.handleUnauthorized
 		}
 
-		handler(ctx, &authn, authz.getRedirectionURL(&object, autheliaURL))
+		handler(ctx, &authn, authz.getLoginRedirectionURL(&object, autheliaURL))
 	case AuthzResultAuthorized:
 		authz.handleAuthorized(ctx, &authn)
 	}
@@ -127,7 +139,7 @@ func (authz *Authz) getAutheliaURL(ctx *middlewares.AutheliaCtx, provider *sessi
 	return nil, fmt.Errorf("authelia url lookup failed")
 }
 
-func (authz *Authz) getRedirectionURL(object *authorization.Object, autheliaURL *url.URL) (redirectionURL *url.URL) {
+func (authz *Authz) getLoginRedirectionURL(object *authorization.Object, autheliaURL *url.URL) (redirectionURL *url.URL) {
 	if autheliaURL == nil {
 		return nil
 	}
@@ -147,6 +159,30 @@ func (authz *Authz) getRedirectionURL(object *authorization.Object, autheliaURL 
 	}
 
 	redirectionURL.RawQuery = qry.Encode()
+
+	return redirectionURL
+}
+
+func (authz *Authz) getAccessDeniedRedirection(object *authorization.Object, autheliaURL *url.URL) (redirectionURL *url.URL) {
+	if autheliaURL == nil {
+		return nil
+	}
+
+	autheliaDeniedURL, _ := url.ParseRequestURI(autheliaURL.String())
+
+	if autheliaDeniedURL.Path == "" {
+		autheliaDeniedURL.Path = "/"
+	}
+
+	autheliaDeniedURL.Path += baseErrorPath
+
+	qry := autheliaDeniedURL.Query()
+
+	qry.Set(queryArgEC, errorForbidden)
+
+	autheliaDeniedURL.RawQuery = qry.Encode()
+
+	redirectionURL = authz.getLoginRedirectionURL(object, autheliaDeniedURL)
 
 	return redirectionURL
 }

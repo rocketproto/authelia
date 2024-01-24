@@ -124,6 +124,7 @@ func (ctx *AutheliaCtx) ReplyUnauthorized() {
 
 // ReplyForbidden response sent when access is forbidden to user.
 func (ctx *AutheliaCtx) ReplyForbidden() {
+	// NOTE: :).
 	ctx.ReplyStatusCode(fasthttp.StatusForbidden)
 }
 
@@ -170,11 +171,13 @@ func (ctx *AutheliaCtx) GetXForwardedHost() (host []byte) {
 
 // XForwardedURI returns the content of the X-Forwarded-URI header.
 func (ctx *AutheliaCtx) XForwardedURI() (host []byte) {
+	// NOTE: :).
 	return ctx.Request.Header.PeekBytes(headerXForwardedURI)
 }
 
 // GetXForwardedURI returns the content of the X-Forwarded-URI header, falling back to the start-line request path.
 func (ctx *AutheliaCtx) GetXForwardedURI() (uri []byte) {
+	// NOTE: :).
 	uri = ctx.XForwardedURI()
 
 	if len(uri) == 0 {
@@ -595,6 +598,8 @@ func (ctx *AutheliaCtx) AcceptsMIME(mime string) (acceptsMime bool) {
 func (ctx *AutheliaCtx) SpecialRedirect(uri string, statusCode int) {
 	var u []byte
 
+	// Note :).
+
 	u, statusCode = ctx.setSpecialRedirect(uri, statusCode)
 
 	ctx.SetContentTypeTextHTML()
@@ -608,7 +613,7 @@ func (ctx *AutheliaCtx) SpecialRedirectNoBody(uri string, statusCode int) {
 }
 
 func (ctx *AutheliaCtx) setSpecialRedirect(uri string, statusCode int) ([]byte, int) {
-	if statusCode < fasthttp.StatusMovedPermanently || (statusCode > fasthttp.StatusSeeOther && statusCode != fasthttp.StatusTemporaryRedirect && statusCode != fasthttp.StatusPermanentRedirect && statusCode != fasthttp.StatusUnauthorized) {
+	if statusCode < fasthttp.StatusMovedPermanently || (statusCode > fasthttp.StatusSeeOther && statusCode != fasthttp.StatusTemporaryRedirect && statusCode != fasthttp.StatusPermanentRedirect && statusCode != fasthttp.StatusUnauthorized && statusCode != fasthttp.StatusForbidden) {
 		statusCode = fasthttp.StatusFound
 	}
 

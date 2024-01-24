@@ -33,46 +33,38 @@ func handleAuthzGetObjectForwardAuth(ctx *middlewares.AutheliaCtx) (object autho
 	return authorization.NewObjectRaw(targetURL, method), nil
 }
 
-// Forward Auth
+// Forward Auth.
 func handleAuthzUnauthorizedForwardAuth(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL) {
 	var (
 		statusCode int
 	)
 
-	ctx.Logger.Infof("Using: FORWARD AUTH METHOD") // REMOVE
+	ctx.Logger.Infof("Using: FORWARD AUTH METHOD") // REMOVE.
 
-	// Checks if request is expecting html or is from a browser
+	// Checks if request is expecting html or is from a browser.
 	if isRenderingHTML(ctx) {
 		statusCode = fasthttp.StatusUnauthorized
 	} else {
 		statusCode = determineStatusCodeFromAuthn(authn)
 	}
 
-	// Checks if request is expecting html or is from a browser
-	// switch {
-	// case ctx.IsXHR() || !ctx.AcceptsMIME("text/html"):
-	// 	statusCode = fasthttp.StatusUnauthorized
-	// default:
-	// 	// determine redirect type
-	// 	switch authn.Object.Method {
-	// 	case fasthttp.MethodGet, fasthttp.MethodOptions, fasthttp.MethodHead:
-	// 		statusCode = fasthttp.StatusFound
-	// 	default:
-	// 		statusCode = fasthttp.StatusSeeOther
-	// 	}
-	// }
+	handleSpecialRedirect(ctx, authn, redirectionURL, statusCode)
+}
 
-	handleSpecialRedirect(ctx, authn,redirectionURL, statusCode)
+// Forward Auth.
+func handleAuthzForbiddenForwardAuth(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL) {
+	var (
+		statusCode int
+	)
 
-	// ctx.Logger.Infof(logFmtAuthzRedirect, authn.Object.String(), authn.Method, authn.Username, statusCode, redirectionURL)
+	ctx.Logger.Infof("Using: FORWARD AUTH METHOD") // REMOVE.
 
-	// // NOTE :) 401 Redirects
+	// Checks if request is expecting html or is from a browser.
+	if isRenderingHTML(ctx) {
+		statusCode = fasthttp.StatusForbidden
+	} else {
+		statusCode = determineStatusCodeFromAuthn(authn)
+	}
 
-	// // Special Redirect Handling
-	// switch authn.Object.Method {
-	// case fasthttp.MethodHead:
-	// 	ctx.SpecialRedirectNoBody(redirectionURL.String(), statusCode)
-	// default:
-	// 	ctx.SpecialRedirect(redirectionURL.String(), statusCode)
-	// }
+	handleSpecialRedirect(ctx, authn, redirectionURL, statusCode)
 }
