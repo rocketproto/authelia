@@ -1,19 +1,19 @@
 import React, { useCallback, useEffect, useState } from "react";
 
 import { Visibility, VisibilityOff } from "@mui/icons-material";
-import { Button, Grid, IconButton, InputAdornment, Theme } from "@mui/material";
+import { Button, FormControl, Grid, IconButton, InputAdornment, Theme } from "@mui/material";
+import TextField from "@mui/material/TextField";
 import makeStyles from "@mui/styles/makeStyles";
 import classnames from "classnames";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
-import FixedTextField from "@components/FixedTextField";
 import PasswordMeter from "@components/PasswordMeter";
 import { IndexRoute } from "@constants/Routes";
 import { IdentityToken } from "@constants/SearchParams";
 import { useNotifications } from "@hooks/NotificationsContext";
 import { useQueryParam } from "@hooks/QueryParam";
-import LoginLayout from "@layouts/LoginLayout";
+import MinimalLayout from "@layouts/MinimalLayout";
 import { PasswordPolicyConfiguration, PasswordPolicyMode } from "@models/PasswordPolicy";
 import { getPasswordPolicyConfiguration } from "@services/PasswordPolicyConfiguration";
 import { completeResetPasswordProcess, resetPassword } from "@services/ResetPassword";
@@ -61,7 +61,7 @@ const ResetPasswordStep2 = function () {
         } catch (err) {
             console.error(err);
             createErrorNotification(
-                translate("There was an issue completing the process. The verification token might have expired"),
+                translate("There was an issue completing the process the verification token might have expired"),
             );
             setFormDisabled(true);
         }
@@ -96,9 +96,13 @@ const ResetPasswordStep2 = function () {
         } catch (err) {
             console.error(err);
             if ((err as Error).message.includes("0000052D.")) {
-                createErrorNotification("Your supplied password does not meet the password policy requirements.");
+                createErrorNotification(
+                    translate("Your supplied password does not meet the password policy requirements"),
+                );
             } else if ((err as Error).message.includes("policy")) {
-                createErrorNotification("Your supplied password does not meet the password policy requirements.");
+                createErrorNotification(
+                    translate("Your supplied password does not meet the password policy requirements"),
+                );
             } else {
                 createErrorNotification(translate("There was an issue resetting the password"));
             }
@@ -110,86 +114,88 @@ const ResetPasswordStep2 = function () {
     const handleCancelClick = () => navigate(IndexRoute);
 
     return (
-        <LoginLayout title={translate("Enter new password")} id="reset-password-step2-stage">
-            <Grid container className={styles.root} spacing={2}>
-                <Grid item xs={12}>
-                    <FixedTextField
-                        id="password1-textfield"
-                        label={translate("New password")}
-                        variant="outlined"
-                        type={showPassword ? "text" : "password"}
-                        value={password1}
-                        disabled={formDisabled}
-                        onChange={(e) => setPassword1(e.target.value)}
-                        error={errorPassword1}
-                        className={classnames(styles.fullWidth)}
-                        autoComplete="new-password"
-                        InputProps={{
-                            endAdornment: (
-                                <InputAdornment position="end">
-                                    <IconButton
-                                        aria-label="toggle password visibility"
-                                        onClick={(e) => setShowPassword(!showPassword)}
-                                        edge="end"
-                                        size="large"
-                                    >
-                                        {showPassword ? <VisibilityOff></VisibilityOff> : <Visibility></Visibility>}
-                                    </IconButton>
-                                </InputAdornment>
-                            ),
-                        }}
-                    />
-                    {pPolicy.mode === PasswordPolicyMode.Disabled ? null : (
-                        <PasswordMeter value={password1} policy={pPolicy} />
-                    )}
+        <MinimalLayout title={translate("Enter new password")} id="reset-password-step2-stage">
+            <FormControl id={"form-reset-password"}>
+                <Grid container className={styles.root} spacing={2}>
+                    <Grid item xs={12}>
+                        <TextField
+                            id="password1-textfield"
+                            label={translate("New password")}
+                            variant="outlined"
+                            type={showPassword ? "text" : "password"}
+                            value={password1}
+                            disabled={formDisabled}
+                            onChange={(e) => setPassword1(e.target.value)}
+                            error={errorPassword1}
+                            className={classnames(styles.fullWidth)}
+                            autoComplete="new-password"
+                            InputProps={{
+                                endAdornment: (
+                                    <InputAdornment position="end">
+                                        <IconButton
+                                            aria-label="toggle password visibility"
+                                            onClick={(e) => setShowPassword(!showPassword)}
+                                            edge="end"
+                                            size="large"
+                                        >
+                                            {showPassword ? <VisibilityOff></VisibilityOff> : <Visibility></Visibility>}
+                                        </IconButton>
+                                    </InputAdornment>
+                                ),
+                            }}
+                        />
+                        {pPolicy.mode === PasswordPolicyMode.Disabled ? null : (
+                            <PasswordMeter value={password1} policy={pPolicy} />
+                        )}
+                    </Grid>
+                    <Grid item xs={12}>
+                        <TextField
+                            id="password2-textfield"
+                            label={translate("Repeat new password")}
+                            variant="outlined"
+                            type={showPassword ? "text" : "password"}
+                            disabled={formDisabled}
+                            value={password2}
+                            onChange={(e) => setPassword2(e.target.value)}
+                            error={errorPassword2}
+                            onKeyDown={(ev) => {
+                                if (ev.key === "Enter") {
+                                    doResetPassword();
+                                    ev.preventDefault();
+                                }
+                            }}
+                            className={classnames(styles.fullWidth)}
+                            autoComplete="new-password"
+                        />
+                    </Grid>
+                    <Grid item xs={6}>
+                        <Button
+                            id="reset-button"
+                            variant="contained"
+                            color="primary"
+                            name="password1"
+                            disabled={formDisabled}
+                            onClick={handleResetClick}
+                            className={styles.fullWidth}
+                        >
+                            {translate("Reset")}
+                        </Button>
+                    </Grid>
+                    <Grid item xs={6}>
+                        <Button
+                            id="cancel-button"
+                            variant="contained"
+                            color="primary"
+                            name="password2"
+                            onClick={handleCancelClick}
+                            className={styles.fullWidth}
+                        >
+                            {translate("Cancel")}
+                        </Button>
+                    </Grid>
                 </Grid>
-                <Grid item xs={12}>
-                    <FixedTextField
-                        id="password2-textfield"
-                        label={translate("Repeat new password")}
-                        variant="outlined"
-                        type={showPassword ? "text" : "password"}
-                        disabled={formDisabled}
-                        value={password2}
-                        onChange={(e) => setPassword2(e.target.value)}
-                        error={errorPassword2}
-                        onKeyPress={(ev) => {
-                            if (ev.key === "Enter") {
-                                doResetPassword();
-                                ev.preventDefault();
-                            }
-                        }}
-                        className={classnames(styles.fullWidth)}
-                        autoComplete="new-password"
-                    />
-                </Grid>
-                <Grid item xs={6}>
-                    <Button
-                        id="reset-button"
-                        variant="contained"
-                        color="primary"
-                        name="password1"
-                        disabled={formDisabled}
-                        onClick={handleResetClick}
-                        className={styles.fullWidth}
-                    >
-                        {translate("Reset")}
-                    </Button>
-                </Grid>
-                <Grid item xs={6}>
-                    <Button
-                        id="cancel-button"
-                        variant="contained"
-                        color="primary"
-                        name="password2"
-                        onClick={handleCancelClick}
-                        className={styles.fullWidth}
-                    >
-                        {translate("Cancel")}
-                    </Button>
-                </Grid>
-            </Grid>
-        </LoginLayout>
+            </FormControl>
+        </MinimalLayout>
     );
 };
 

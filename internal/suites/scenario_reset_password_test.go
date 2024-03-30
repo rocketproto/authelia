@@ -18,8 +18,7 @@ func NewResetPasswordScenario() *ResetPasswordScenario {
 }
 
 func (s *ResetPasswordScenario) SetupSuite() {
-	browser, err := StartRod()
-
+	browser, err := NewRodSession(RodSessionWithCredentials(s))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -52,7 +51,7 @@ func (s *ResetPasswordScenario) TestShouldResetPassword() {
 		s.collectScreenshot(ctx.Err(), s.Page)
 	}()
 
-	s.doVisit(s.T(), s.Context(ctx), GetLoginBaseURL(BaseDomain))
+	s.doVisit(s.T(), s.Context(ctx), GetLoginBaseURLWithFallbackPrefix(BaseDomain, "/"))
 	s.verifyIsFirstFactorPage(s.T(), s.Context(ctx))
 
 	// Reset the password to abc.
@@ -60,7 +59,7 @@ func (s *ResetPasswordScenario) TestShouldResetPassword() {
 
 	// Try to login with the old password.
 	s.doLoginOneFactor(s.T(), s.Context(ctx), "john", "password", false, BaseDomain, "")
-	s.verifyNotificationDisplayed(s.T(), s.Context(ctx), "Incorrect username or password.")
+	s.verifyNotificationDisplayed(s.T(), s.Context(ctx), "Incorrect username or password")
 
 	// Try to login with the new password.
 	s.doLoginOneFactor(s.T(), s.Context(ctx), "john", "abc", false, BaseDomain, "")
@@ -79,7 +78,7 @@ func (s *ResetPasswordScenario) TestShouldMakeAttackerThinkPasswordResetIsInitia
 		s.collectScreenshot(ctx.Err(), s.Page)
 	}()
 
-	s.doVisit(s.T(), s.Context(ctx), GetLoginBaseURL(BaseDomain))
+	s.doVisit(s.T(), s.Context(ctx), GetLoginBaseURLWithFallbackPrefix(BaseDomain, "/"))
 	s.verifyIsFirstFactorPage(s.T(), s.Context(ctx))
 
 	// Try to initiate a password reset of an nonexistent user.
@@ -96,14 +95,14 @@ func (s *ResetPasswordScenario) TestShouldLetUserNoticeThereIsAPasswordMismatch(
 		s.collectScreenshot(ctx.Err(), s.Page)
 	}()
 
-	s.doVisit(s.T(), s.Context(ctx), GetLoginBaseURL(BaseDomain))
+	s.doVisit(s.T(), s.Context(ctx), GetLoginBaseURLWithFallbackPrefix(BaseDomain, "/"))
 	s.verifyIsFirstFactorPage(s.T(), s.Context(ctx))
 
 	s.doInitiatePasswordReset(s.T(), s.Context(ctx), "john")
 	s.verifyMailNotificationDisplayed(s.T(), s.Context(ctx))
 
 	s.doCompletePasswordReset(s.T(), s.Context(ctx), "password", "another_password")
-	s.verifyNotificationDisplayed(s.T(), s.Context(ctx), "Passwords do not match.")
+	s.verifyNotificationDisplayed(s.T(), s.Context(ctx), "Passwords do not match")
 }
 
 func TestRunResetPasswordScenario(t *testing.T) {

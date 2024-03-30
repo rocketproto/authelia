@@ -1,15 +1,14 @@
 package oidc
 
 import (
-	"context"
 	"net/url"
 	"time"
 
+	oauthelia2 "authelia.com/provider/oauth2"
+	"authelia.com/provider/oauth2/handler/openid"
+	"authelia.com/provider/oauth2/token/jwt"
 	"github.com/google/uuid"
 	"github.com/mohae/deepcopy"
-	"github.com/ory/fosite"
-	"github.com/ory/fosite/handler/openid"
-	"github.com/ory/fosite/token/jwt"
 
 	"github.com/authelia/authelia/v4/internal/model"
 )
@@ -31,7 +30,7 @@ func NewSession() (session *Session) {
 
 // NewSessionWithAuthorizeRequest uses details from an AuthorizeRequester to generate an OpenIDSession.
 func NewSessionWithAuthorizeRequest(ctx Context, issuer *url.URL, kid, username string, amr []string, extra map[string]any,
-	authTime time.Time, consent *model.OAuth2ConsentSession, requester fosite.AuthorizeRequester) (session *Session) {
+	authTime time.Time, consent *model.OAuth2ConsentSession, requester oauthelia2.AuthorizeRequester) (session *Session) {
 	if extra == nil {
 		extra = map[string]any{}
 	}
@@ -71,32 +70,6 @@ func NewSessionWithAuthorizeRequest(ctx Context, issuer *url.URL, kid, username 
 	return session
 }
 
-// PopulateClientCredentialsFlowSessionWithAccessRequest is used to configure a session when performing a client credentials grant.
-func PopulateClientCredentialsFlowSessionWithAccessRequest(ctx Context, request fosite.AccessRequester, session *Session, funcGetKID func(ctx context.Context, kid, alg string) string) (err error) {
-	var (
-		issuer *url.URL
-		client Client
-		ok     bool
-	)
-
-	if issuer, err = ctx.IssuerURL(); err != nil {
-		return fosite.ErrServerError.WithWrap(err).WithDebugf("Failed to determine the issuer with error: %s.", err.Error())
-	}
-
-	if client, ok = request.GetClient().(Client); !ok {
-		return fosite.ErrServerError.WithDebugf("Failed to get the client for the request.")
-	}
-
-	session.Subject = ""
-	session.Claims.Subject = client.GetID()
-	session.ClientID = client.GetID()
-	session.DefaultSession.Claims.Issuer = issuer.String()
-	session.DefaultSession.Claims.IssuedAt = ctx.GetClock().Now().UTC()
-	session.DefaultSession.Claims.RequestedAt = ctx.GetClock().Now().UTC()
-
-	return nil
-}
-
 // Session holds OpenID Connect 1.0 Session information.
 type Session struct {
 	*openid.DefaultSession `json:"id_token"`
@@ -104,6 +77,7 @@ type Session struct {
 	ChallengeID           uuid.NullUUID  `json:"challenge_id"`
 	KID                   string         `json:"kid"`
 	ClientID              string         `json:"client_id"`
+	ClientCredentials     bool           `json:"client_credentials"`
 	ExcludeNotBeforeClaim bool           `json:"exclude_nbf_claim"`
 	AllowedTopLevelClaims []string       `json:"allowed_top_level_claims"`
 	Extra                 map[string]any `json:"extra"`
@@ -152,7 +126,7 @@ func (s *Session) GetJWTClaims() jwt.JWTClaimsContainer {
 
 	claims := &jwt.JWTClaims{
 		Subject:   s.Subject,
-		ExpiresAt: s.GetExpiresAt(fosite.AccessToken),
+		ExpiresAt: s.GetExpiresAt(oauthelia2.AccessToken),
 		IssuedAt:  time.Now().UTC(),
 		Extra:     map[string]any{},
 	}
@@ -200,11 +174,11 @@ func (s *Session) GetExtraClaims() map[string]any {
 	return s.Extra
 }
 
-// Clone copies the OpenIDSession to a new fosite.Session.
-func (s *Session) Clone() fosite.Session {
+// Clone copies the OpenIDSession to a new oauthelia2.Session.
+func (s *Session) Clone() oauthelia2.Session {
 	if s == nil {
 		return nil
 	}
 
-	return deepcopy.Copy(s).(fosite.Session)
+	return deepcopy.Copy(s).(oauthelia2.Session)
 }

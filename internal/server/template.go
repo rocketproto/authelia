@@ -39,7 +39,7 @@ func ServeTemplatedFile(t templates.Template, opts *TemplatedFileOptions) middle
 			}
 		}
 
-		middlewares.SetStandardSecurityHeaders(ctx.RequestCtx)
+		middlewares.SetBaseSecurityHeaders(ctx.RequestCtx)
 
 		switch ext {
 		case extHTML:
@@ -68,17 +68,11 @@ func ServeTemplatedFile(t templates.Template, opts *TemplatedFileOptions) middle
 			provider   *session.Session
 		)
 
-		if provider, err = ctx.GetSessionProvider(); err == nil {
-			if provider.Config.AutheliaURL != nil {
-				baseURL = provider.Config.AutheliaURL.String()
-			} else {
-				baseURL = ctx.RootURLSlash().String()
-			}
+		baseURL = ctx.RootURLSlash().String()
 
+		if provider, err = ctx.GetSessionProvider(); err == nil {
 			domain = provider.Config.Domain
 			rememberMe = strconv.FormatBool(!provider.Config.DisableRememberMe)
-		} else {
-			baseURL = ctx.RootURLSlash().String()
 		}
 
 		data := &bytes.Buffer{}
@@ -275,6 +269,8 @@ func NewTemplatedFileOptions(config *schema.Configuration) (opts *TemplatedFileO
 		RememberMe:             strconv.FormatBool(!config.Session.DisableRememberMe),
 		ResetPassword:          strconv.FormatBool(!config.AuthenticationBackend.PasswordReset.Disable),
 		ResetPasswordCustomURL: config.AuthenticationBackend.PasswordReset.CustomURL.String(),
+		PrivacyPolicyURL:       "",
+		PrivacyPolicyAccept:    strFalse,
 		Theme:                  config.Theme,
 
 		EndpointsPasswordReset: !(config.AuthenticationBackend.PasswordReset.Disable || config.AuthenticationBackend.PasswordReset.CustomURL.String() != ""),

@@ -38,11 +38,12 @@ func koanfGetKeys(ko *koanf.Koanf) (keys []string) {
 	return keys
 }
 
-func koanfRemapKeys(val *schema.StructValidator, ko *koanf.Koanf, ds map[string]Deprecation) (final *koanf.Koanf, err error) {
+func koanfRemapKeys(val *schema.StructValidator, ko *koanf.Koanf, ds map[string]Deprecation, dms []MultiKeyMappedDeprecation) (final *koanf.Koanf, err error) {
 	keys := ko.All()
 
 	keys = koanfRemapKeysStandard(keys, val, ds)
 	keys = koanfRemapKeysMapped(keys, val, ds)
+	koanfRemapKeysMultiMapped(keys, val, dms)
 
 	final = koanf.New(".")
 
@@ -78,8 +79,7 @@ func koanfRemapKeysStandard(keys map[string]any, val *schema.StructValidator, ds
 			}
 
 			if !mapHasKey(d.NewKey, keys) && !mapHasKey(d.NewKey, keysFinal) {
-				val.PushWarning(fmt.Errorf("configuration key '%s' is deprecated in %s and has been replaced by '%s': "+
-					"this has been automatically mapped for you but you will need to adjust your configuration to remove this message", d.Key, d.Version.String(), d.NewKey))
+				val.PushWarning(fmt.Errorf(errFmtAutoMapKey, d.Key, d.Version.String(), d.NewKey, d.Version.NextMajor().String()))
 
 				if d.MapFunc != nil {
 					keysFinal[d.NewKey] = d.MapFunc(value)
@@ -87,8 +87,7 @@ func koanfRemapKeysStandard(keys map[string]any, val *schema.StructValidator, ds
 					keysFinal[d.NewKey] = value
 				}
 			} else {
-				val.PushWarning(fmt.Errorf("configuration key '%s' is deprecated in %s and has been replaced by '%s': "+
-					"this has not been automatically mapped for you because the replacement key also exists and you will need to adjust your configuration to remove this message", d.Key, d.Version.String(), d.NewKey))
+				val.PushWarning(fmt.Errorf(errFmtAutoMapKeyExisting, d.Key, d.Version.String(), d.NewKey))
 			}
 
 			continue
@@ -143,8 +142,7 @@ func koanfRemapKeysMapped(keys map[string]any, val *schema.StructValidator, ds m
 
 						continue
 					} else {
-						val.PushWarning(fmt.Errorf("configuration key '%s' is deprecated in %s and has been replaced by '%s': "+
-							"this has been automatically mapped for you but you will need to adjust your configuration to remove this message", d.Key, d.Version.String(), d.NewKey))
+						val.PushWarning(fmt.Errorf(errFmtAutoMapKey, d.Key, d.Version.String(), d.NewKey, d.Version.NextMajor().String()))
 					}
 
 					newkey := strings.Replace(d.NewKey, prefix, "", 1)
@@ -168,4 +166,30 @@ func koanfRemapKeysMapped(keys map[string]any, val *schema.StructValidator, ds m
 	}
 
 	return keysFinal
+}
+
+func koanfRemapKeysMultiMapped(keys map[string]any, val *schema.StructValidator, dms []MultiKeyMappedDeprecation) {
+	for _, dm := range dms {
+		var found bool
+
+		for _, k := range dm.Keys {
+			if _, ok := keys[k]; ok {
+				found = true
+
+				break
+			}
+		}
+
+		if !found {
+			continue
+		}
+
+		if v, ok := keys[dm.NewKey]; ok {
+			val.Push(fmt.Errorf(errFmtMultiKeyMappingExists, strJoinAnd(dm.Keys), dm.NewKey, v))
+
+			continue
+		}
+
+		dm.MapFunc(dm, keys, val)
+	}
 }

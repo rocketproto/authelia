@@ -214,6 +214,7 @@ func TestNewX509CertificateChain(t *testing.T) {
 					assert.NotNil(t, actual.Leaf())
 					assert.NotNil(t, actual.CertificatesRaw())
 				}
+
 				assert.NoError(t, err)
 			default:
 				assert.Nil(t, actual)
@@ -364,7 +365,7 @@ func TestJSONSchema(t *testing.T) {
 		&AccessControlRuleMethods{},
 		&AccessControlRuleRegex{},
 		&AccessControlRuleSubjects{},
-		&IdentityProvidersOpenIDConnectClientRedirectURIs{},
+		&IdentityProvidersOpenIDConnectClientURIs{},
 	}
 
 	for _, tc := range testCases {
@@ -398,7 +399,7 @@ func MustParseCertificate(data string) *x509.Certificate {
 	}
 
 	if block.Type != blockCERTIFICATE {
-		panic(fmt.Sprintf("not certifiate block: %s", block.Type))
+		panic(fmt.Sprintf("not certificate block: %s", block.Type))
 	}
 
 	cert, err := x509.ParseCertificate(block.Bytes)

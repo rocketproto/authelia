@@ -2,27 +2,28 @@ package oidc
 
 import (
 	"context"
+	"net/http"
 	"net/url"
 	"time"
 
-	"github.com/go-crypt/crypt/algorithm"
+	oauthelia2 "authelia.com/provider/oauth2"
+	fjwt "authelia.com/provider/oauth2/token/jwt"
+	"github.com/go-jose/go-jose/v4"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/ory/fosite"
-	fjwt "github.com/ory/fosite/token/jwt"
 	"github.com/ory/herodot"
-	"gopkg.in/square/go-jose.v2"
 
 	"github.com/authelia/authelia/v4/internal/authentication"
 	"github.com/authelia/authelia/v4/internal/authorization"
 	"github.com/authelia/authelia/v4/internal/clock"
 	"github.com/authelia/authelia/v4/internal/configuration/schema"
 	"github.com/authelia/authelia/v4/internal/model"
+	"github.com/authelia/authelia/v4/internal/random"
 	"github.com/authelia/authelia/v4/internal/storage"
 )
 
 // OpenIDConnectProvider for OpenID Connect.
 type OpenIDConnectProvider struct {
-	fosite.OAuth2Provider
+	oauthelia2.Provider
 	*herodot.JSONWriter
 	*Store
 	*Config
@@ -32,28 +33,41 @@ type OpenIDConnectProvider struct {
 	discovery OpenIDConnectWellKnownConfiguration
 }
 
-// Store is Authelia's internal representation of the fosite.Storage interface. It maps the following
+// Store is Authelia's internal representation of the oauthelia2.Storage interface. It maps the following
 // interfaces to the storage.Provider interface:
-// fosite.Storage, fosite.ClientManager, storage.Transactional, oauth2.AuthorizeCodeStorage, oauth2.AccessTokenStorage,
+// oauthelia2.Storage, oauthelia2.ClientManager, storage.Transactional, oauth2.AuthorizeCodeStorage, oauth2.AccessTokenStorage,
 // oauth2.RefreshTokenStorage, oauth2.TokenRevocationStorage, pkce.PKCERequestStorage,
 // openid.OpenIDConnectRequestStorage, and partially implements rfc7523.RFC7523KeyStorage.
 type Store struct {
+	ClientStore
+
 	provider storage.Provider
-	clients  map[string]Client
 }
 
-// BaseClient is the base for all clients.
-type BaseClient struct {
-	ID               string
-	Description      string
-	Secret           *schema.PasswordDigest
-	SectorIdentifier string
-	Public           bool
+// ClientStore is an abstraction used for the Store struct which stores clients.
+type ClientStore interface {
+	// GetRegisteredClient returns a Client matching the provided id.
+	GetRegisteredClient(ctx context.Context, id string) (client Client, err error)
+}
 
-	EnforcePAR bool
+// MemoryClientStore is an implementation of the ClientStore which just stores the clients in memory.
+type MemoryClientStore struct {
+	clients map[string]Client
+}
 
-	EnforcePKCE                bool
-	EnforcePKCEChallengeMethod bool
+// RegisteredClient represents a registered client.
+type RegisteredClient struct {
+	ID                   string
+	Name                 string
+	ClientSecret         *ClientSecretDigest
+	RotatedClientSecrets []*ClientSecretDigest
+	SectorIdentifierURI  *url.URL
+	Public               bool
+
+	RequirePushedAuthorizationRequests bool
+
+	RequirePKCE                bool
+	RequirePKCEChallengeMethod bool
 	PKCEChallengeMethod        string
 
 	Audience      []string
@@ -61,50 +75,54 @@ type BaseClient struct {
 	RedirectURIs  []string
 	GrantTypes    []string
 	ResponseTypes []string
-	ResponseModes []fosite.ResponseModeType
+	ResponseModes []oauthelia2.ResponseModeType
 
 	Lifespans schema.IdentityProvidersOpenIDConnectLifespan
 
-	AuthorizationSignedResponseAlg   string
-	AuthorizationSignedResponseKeyID string
-	IDTokenSignedResponseAlg         string
-	IDTokenSignedResponseKeyID       string
-	AccessTokenSignedResponseAlg     string
-	AccessTokenSignedResponseKeyID   string
-	UserinfoSignedResponseAlg        string
-	UserinfoSignedResponseKeyID      string
+	AuthorizationSignedResponseAlg              string
+	AuthorizationSignedResponseKeyID            string
+	AuthorizationEncryptedResponseAlg           string
+	AuthorizationEncryptedResponseEncryptionAlg string
+
+	IDTokenSignedResponseAlg   string
+	IDTokenSignedResponseKeyID string
+
+	AccessTokenSignedResponseAlg   string
+	AccessTokenSignedResponseKeyID string
+
+	UserinfoSignedResponseAlg   string
+	UserinfoSignedResponseKeyID string
+
 	IntrospectionSignedResponseAlg   string
 	IntrospectionSignedResponseKeyID string
 
-	RefreshFlowIgnoreOriginalGrantedScopes bool
+	RequestObjectSigningAlg string
+
+	TokenEndpointAuthMethod     string
+	TokenEndpointAuthSigningAlg string
+
+	RefreshFlowIgnoreOriginalGrantedScopes  bool
+	AllowMultipleAuthenticationMethods      bool
+	ClientCredentialsFlowAllowImplicitScope bool
 
 	AuthorizationPolicy ClientAuthorizationPolicy
 
 	ConsentPolicy         ClientConsentPolicy
 	RequestedAudienceMode ClientRequestedAudienceMode
-}
 
-// FullClient is the client with comprehensive supported features.
-type FullClient struct {
-	*BaseClient
-
-	RequestURIs                 []string
-	JSONWebKeys                 *jose.JSONWebKeySet
-	JSONWebKeysURI              string
-	RequestObjectSigningAlg     string
-	TokenEndpointAuthMethod     string
-	TokenEndpointAuthSigningAlg string
+	RequestURIs    []string
+	JSONWebKeys    *jose.JSONWebKeySet
+	JSONWebKeysURI *url.URL
 }
 
 // Client represents the internal client definitions.
 type Client interface {
-	fosite.Client
-	fosite.ResponseModeClient
+	oauthelia2.Client
+	oauthelia2.ResponseModeClient
 	RefreshFlowScopeClient
 
-	GetDescription() (description string)
-	GetSecret() (secret algorithm.Digest)
-	GetSectorIdentifier() (sector string)
+	GetName() (name string)
+	GetSectorIdentifierURI() (sector string)
 
 	GetAuthorizationSignedResponseAlg() (alg string)
 	GetAuthorizationSignedResponseKeyID() (kid string)
@@ -114,7 +132,7 @@ type Client interface {
 
 	GetAccessTokenSignedResponseAlg() (alg string)
 	GetAccessTokenSignedResponseKeyID() (kid string)
-	GetJWTProfileOAuthAccessTokensEnabled() bool
+	GetEnableJWTProfileOAuthAccessTokens() bool
 
 	GetUserinfoSignedResponseAlg() (alg string)
 	GetUserinfoSignedResponseKeyID() (kid string)
@@ -122,28 +140,26 @@ type Client interface {
 	GetIntrospectionSignedResponseAlg() (alg string)
 	GetIntrospectionSignedResponseKeyID() (kid string)
 
-	GetPAREnforcement() (enforce bool)
-	GetPKCEEnforcement() (enforce bool)
-	GetPKCEChallengeMethodEnforcement() (enforce bool)
+	GetRequirePushedAuthorizationRequests() (enforce bool)
+
+	GetEnforcePKCE() (enforce bool)
+	GetEnforcePKCEChallengeMethod() (enforce bool)
 	GetPKCEChallengeMethod() (method string)
 
-	ValidatePKCEPolicy(r fosite.Requester) (err error)
-	ValidatePARPolicy(r fosite.Requester, prefix string) (err error)
-	ValidateResponseModePolicy(r fosite.AuthorizeRequester) (err error)
+	ValidateResponseModePolicy(r oauthelia2.AuthorizeRequester) (err error)
 
-	ApplyRequestedAudiencePolicy(requester fosite.Requester)
 	GetConsentResponseBody(consent *model.OAuth2ConsentSession) (body ConsentGetResponseBody)
 	GetConsentPolicy() ClientConsentPolicy
 	IsAuthenticationLevelSufficient(level authentication.Level, subject authorization.Subject) (sufficient bool)
 	GetAuthorizationPolicyRequiredLevel(subject authorization.Subject) (level authorization.Level)
 	GetAuthorizationPolicy() (policy ClientAuthorizationPolicy)
 
-	GetEffectiveLifespan(gt fosite.GrantType, tt fosite.TokenType, fallback time.Duration) (lifespan time.Duration)
+	GetEffectiveLifespan(gt oauthelia2.GrantType, tt oauthelia2.TokenType, fallback time.Duration) (lifespan time.Duration)
 }
 
 // RefreshFlowScopeClient is a client which can be customized to ignore scopes that were not originally granted.
 type RefreshFlowScopeClient interface {
-	fosite.Client
+	oauthelia2.Client
 
 	GetRefreshFlowIgnoreOriginalGrantedScopes(ctx context.Context) (ignoreOriginalGrantedScopes bool)
 }
@@ -154,13 +170,15 @@ type Context interface {
 
 	RootURL() (issuerURL *url.URL)
 	IssuerURL() (issuerURL *url.URL, err error)
-	GetClock() clock.Provider
-	GetJWTWithTimeFuncOption() jwt.ParserOption
+	GetClock() (clock clock.Provider)
+	GetRandom() (random random.Provider)
+	GetConfiguration() (config schema.Configuration)
+	GetJWTWithTimeFuncOption() (option jwt.ParserOption)
 }
 
-// ClientRequesterResponder is a fosite.Requster or fosite.Responder with a GetClient method.
+// ClientRequesterResponder is a oauthelia2.Requster or fosite.Responder with a GetClient method.
 type ClientRequesterResponder interface {
-	GetClient() fosite.Client
+	GetClient() oauthelia2.Client
 }
 
 // IDTokenClaimsSession is a session which can return the IDTokenClaims type.
@@ -168,12 +186,11 @@ type IDTokenClaimsSession interface {
 	GetIDTokenClaims() *fjwt.IDTokenClaims
 }
 
-// Configurator is an internal extension to the fosite.Configurator.
+// Configurator is an internal extension to the oauthelia2.Configurator.
 type Configurator interface {
-	fosite.Configurator
+	oauthelia2.Configurator
 
 	AuthorizationServerIssuerIdentificationProvider
-	JWTSecuredResponseModeProvider
 }
 
 // AuthorizationServerIssuerIdentificationProvider provides OAuth 2.0 Authorization Server Issuer Identification related methods.
@@ -193,6 +210,18 @@ type IDTokenSessionContainer interface {
 	IDTokenHeaders() *fjwt.Headers
 	IDTokenClaims() *fjwt.IDTokenClaims
 }
+
+type UserDetailer interface {
+	GetUsername() (username string)
+	GetGroups() (groups []string)
+	GetDisplayName() (name string)
+	GetEmails() (emails []string)
+}
+
+// NilErrorReporter is a true nil herodot.ErrorReporter.
+type NilErrorReporter struct{}
+
+func (*NilErrorReporter) ReportError(r *http.Request, code int, err error, args ...interface{}) {}
 
 // ConsentGetResponseBody schema of the response body of the consent GET endpoint.
 type ConsentGetResponseBody struct {
@@ -347,12 +376,6 @@ type CommonDiscoveryOptions struct {
 		Client if it is given.
 	*/
 	OPTOSURI string `json:"op_tos_uri,omitempty"`
-
-	/*
-			A JWT containing metadata values about the authorization server as claims. This is a string value consisting of
-		    the entire signed JWT. A "signed_metadata" metadata value SHOULD NOT appear as a claim in the JWT.
-	*/
-	SignedMetadata string `json:"signed_metadata,omitempty"`
 }
 
 // OAuth2DiscoveryOptions represents the discovery options specific to OAuth 2.0.
@@ -391,6 +414,18 @@ type OAuth2DiscoveryOptions struct {
 	IntrospectionEndpointAuthMethodsSupported []string `json:"introspection_endpoint_auth_methods_supported,omitempty"`
 
 	/*
+		OPTIONAL. JSON array containing a list of the JWS signing algorithms ("alg" values) supported by the
+		introspection endpoint for the signature on the JWT [JWT] used to authenticate the client at the introspection
+		endpoint for the "private_key_jwt" and "client_secret_jwt" authentication methods. This metadata entry MUST be
+		present if either of these authentication methods are specified in the
+		"introspection_endpoint_auth_methods_supported" entry. No default algorithms are implied if this entry is omitted.
+		The value "none" MUST NOT be used.
+		See Also:
+			JWT: https://datatracker.ietf.org/doc/html/rfc7519
+	*/
+	IntrospectionEndpointAuthSigningAlgValuesSupported []string `json:"introspection_endpoint_auth_signing_alg_values_supported,omitempty"`
+
+	/*
 		OPTIONAL. JSON array containing a list of client authentication methods supported by this revocation endpoint.
 		The valid client authentication method values are those registered in the IANA "OAuth Token Endpoint
 		Authentication Methods" registry [IANA.OAuth.Parameters]. If omitted, the default is "client_secret_basic" --
@@ -411,18 +446,6 @@ type OAuth2DiscoveryOptions struct {
 			JWT: https://datatracker.ietf.org/doc/html/rfc7519
 	*/
 	RevocationEndpointAuthSigningAlgValuesSupported []string `json:"revocation_endpoint_auth_signing_alg_values_supported,omitempty"`
-
-	/*
-		OPTIONAL. JSON array containing a list of the JWS signing algorithms ("alg" values) supported by the
-		introspection endpoint for the signature on the JWT [JWT] used to authenticate the client at the introspection
-		endpoint for the "private_key_jwt" and "client_secret_jwt" authentication methods. This metadata entry MUST be
-		present if either of these authentication methods are specified in the
-		"introspection_endpoint_auth_methods_supported" entry. No default algorithms are implied if this entry is omitted.
-		The value "none" MUST NOT be used.
-		See Also:
-			JWT: https://datatracker.ietf.org/doc/html/rfc7519
-	*/
-	IntrospectionEndpointAuthSigningAlgValuesSupported []string `json:"introspection_endpoint_auth_signing_alg_values_supported,omitempty"`
 
 	/*
 		OPTIONAL. JSON array containing a list of PKCE [RFC7636] code challenge methods supported by this authorization
@@ -448,13 +471,13 @@ type OAuth2JWTIntrospectionResponseDiscoveryOptions struct {
 		JWA [RFC7518] supported by the introspection endpoint to encrypt the content encryption key for introspection
 		responses (content key encryption).
 	*/
-	IntrospectionEncryptionAlgValuesSupported []string `json:"introspection_encryption_alg_values_supported"`
+	IntrospectionEncryptionAlgValuesSupported []string `json:"introspection_encryption_alg_values_supported,omitempty"`
 
 	/*
 		OPTIONAL.  JSON array containing a list of the JWE [RFC7516] encryption algorithms ("enc" values) as defined in
 		JWA [RFC7518] supported by the introspection endpoint to encrypt the response (content encryption).
 	*/
-	IntrospectionEncryptionEncValuesSupported []string `json:"introspection_encryption_enc_values_supported"`
+	IntrospectionEncryptionEncValuesSupported []string `json:"introspection_encryption_enc_values_supported,omitempty"`
 }
 
 type OAuth2DeviceAuthorizationGrantDiscoveryOptions struct {
@@ -533,14 +556,6 @@ type OAuth2PushedAuthorizationDiscoveryOptions struct {
 // OpenIDConnectDiscoveryOptions represents the discovery options specific to OpenID Connect.
 type OpenIDConnectDiscoveryOptions struct {
 	/*
-		RECOMMENDED. URL of the OP's UserInfo Endpoint [OpenID.Core]. This URL MUST use the https scheme and MAY contain
-		port, path, and query parameter components.
-		See Also:
-			OpenID.Core: https://openid.net/specs/openid-connect-core-1_0.html
-	*/
-	UserinfoEndpoint string `json:"userinfo_endpoint,omitempty"`
-
-	/*
 		REQUIRED. JSON array containing a list of the JWS signing algorithms (alg values) supported by the OP for the ID
 		Token to encode the Claims in a JWT [JWT]. The algorithm RS256 MUST be included. The value none MAY be supported,
 		but MUST NOT be used unless the Response Type used returns no ID Token from the Authorization Endpoint (such as
@@ -549,6 +564,32 @@ type OpenIDConnectDiscoveryOptions struct {
 			JWT: https://datatracker.ietf.org/doc/html/rfc7519
 	*/
 	IDTokenSigningAlgValuesSupported []string `json:"id_token_signing_alg_values_supported,omitempty"`
+
+	/*
+		OPTIONAL. JSON array containing a list of the JWE encryption algorithms (alg values) supported by the OP for the
+		ID Token to encode the Claims in a JWT [JWT].
+		See Also:
+			JWE: https://datatracker.ietf.org/doc/html/rfc7516
+			JWT: https://datatracker.ietf.org/doc/html/rfc7519
+	*/
+	IDTokenEncryptionAlgValuesSupported []string `json:"id_token_encryption_alg_values_supported,omitempty"`
+
+	/*
+		OPTIONAL. JSON array containing a list of the JWE encryption algorithms (enc values) supported by the OP for the
+		ID Token to encode the Claims in a JWT [JWT].
+		See Also:
+			JWE: https://datatracker.ietf.org/doc/html/rfc7516
+			JWT: https://datatracker.ietf.org/doc/html/rfc7519
+	*/
+	IDTokenEncryptionEncValuesSupported []string `json:"id_token_encryption_enc_values_supported,omitempty"`
+
+	/*
+		RECOMMENDED. URL of the OP's UserInfo Endpoint [OpenID.Core]. This URL MUST use the https scheme and MAY contain
+		port, path, and query parameter components.
+		See Also:
+			OpenID.Core: https://openid.net/specs/openid-connect-core-1_0.html
+	*/
+	UserinfoEndpoint string `json:"userinfo_endpoint,omitempty"`
 
 	/*
 		OPTIONAL. JSON array containing a list of the JWS [JWS] signing algorithms (alg values) [JWA] supported by the
@@ -561,23 +602,6 @@ type OpenIDConnectDiscoveryOptions struct {
 	UserinfoSigningAlgValuesSupported []string `json:"userinfo_signing_alg_values_supported,omitempty"`
 
 	/*
-		OPTIONAL. JSON array containing a list of the JWS signing algorithms (alg values) supported by the OP for Request
-		Objects, which are described in Section 6.1 of OpenID Connect Core 1.0 [OpenID.Core]. These algorithms are used
-		both when the Request Object is passed by value (using the request parameter) and when it is passed by reference
-		(using the request_uri parameter). Servers SHOULD support none and RS256.
-	*/
-	RequestObjectSigningAlgValuesSupported []string `json:"request_object_signing_alg_values_supported,omitempty"`
-
-	/*
-		OPTIONAL. JSON array containing a list of the JWE encryption algorithms (alg values) supported by the OP for the
-		ID Token to encode the Claims in a JWT [JWT].
-		See Also:
-			JWE: https://datatracker.ietf.org/doc/html/rfc7516
-			JWT: https://datatracker.ietf.org/doc/html/rfc7519
-	*/
-	IDTokenEncryptionAlgValuesSupported []string `json:"id_token_encryption_alg_values_supported,omitempty"`
-
-	/*
 		OPTIONAL. JSON array containing a list of the JWE [JWE] encryption algorithms (alg values) [JWA] supported by
 		the UserInfo Endpoint to encode the Claims in a JWT [JWT].
 		See Also:
@@ -588,24 +612,6 @@ type OpenIDConnectDiscoveryOptions struct {
 	UserinfoEncryptionAlgValuesSupported []string `json:"userinfo_encryption_alg_values_supported,omitempty"`
 
 	/*
-		OPTIONAL. JSON array containing a list of the JWE encryption algorithms (alg values) supported by the OP for
-		Request Objects. These algorithms are used both when the Request Object is passed by value and when it is passed
-		by reference.
-		See Also:
-			JWE: https://datatracker.ietf.org/doc/html/rfc7516
-	*/
-	RequestObjectEncryptionAlgValuesSupported []string `json:"request_object_encryption_alg_values_supported,omitempty"`
-
-	/*
-		OPTIONAL. JSON array containing a list of the JWE encryption algorithms (enc values) supported by the OP for the
-		ID Token to encode the Claims in a JWT [JWT].
-		See Also:
-			JWE: https://datatracker.ietf.org/doc/html/rfc7516
-			JWT: https://datatracker.ietf.org/doc/html/rfc7519
-	*/
-	IDTokenEncryptionEncValuesSupported []string `json:"id_token_encryption_enc_values_supported,omitempty"`
-
-	/*
 		OPTIONAL. JSON array containing a list of the JWE encryption algorithms (enc values) [JWA] supported by the
 		UserInfo Endpoint to encode the Claims in a JWT [JWT].
 		See Also:
@@ -614,6 +620,23 @@ type OpenIDConnectDiscoveryOptions struct {
 			JWT: https://datatracker.ietf.org/doc/html/rfc7519
 	*/
 	UserinfoEncryptionEncValuesSupported []string `json:"userinfo_encryption_enc_values_supported,omitempty"`
+
+	/*
+		OPTIONAL. JSON array containing a list of the JWS signing algorithms (alg values) supported by the OP for Request
+		Objects, which are described in Section 6.1 of OpenID Connect Core 1.0 [OpenID.Core]. These algorithms are used
+		both when the Request Object is passed by value (using the request parameter) and when it is passed by reference
+		(using the request_uri parameter). Servers SHOULD support none and RS256.
+	*/
+	RequestObjectSigningAlgValuesSupported []string `json:"request_object_signing_alg_values_supported,omitempty"`
+
+	/*
+		OPTIONAL. JSON array containing a list of the JWE encryption algorithms (alg values) supported by the OP for
+		Request Objects. These algorithms are used both when the Request Object is passed by value and when it is passed
+		by reference.
+		See Also:
+			JWE: https://datatracker.ietf.org/doc/html/rfc7516
+	*/
+	RequestObjectEncryptionAlgValuesSupported []string `json:"request_object_encryption_alg_values_supported,omitempty"`
 
 	/*
 		OPTIONAL. JSON array containing a list of the JWE encryption algorithms (enc values) supported by the OP for
@@ -889,7 +912,7 @@ type OpenIDFederationDiscoveryOptions struct {
 		authentication methods are specified in the request_authentication_methods_supported entry. No default
 		algorithms are implied if this entry is omitted. Servers SHOULD support RS256. The value none MUST NOT be used.
 	*/
-	RequestAuthenticationSigningAlgValuesSupproted []string `json:"request_authentication_signing_alg_values_supported,omitempty"`
+	RequestAuthenticationSigningAlgValuesSupported []string `json:"request_authentication_signing_alg_values_supported,omitempty"`
 }
 
 // OAuth2WellKnownConfiguration represents the well known discovery document specific to OAuth 2.0.
@@ -902,6 +925,22 @@ type OAuth2WellKnownConfiguration struct {
 	*OAuth2JWTIntrospectionResponseDiscoveryOptions
 	*OAuth2JWTSecuredAuthorizationRequestDiscoveryOptions
 	*OAuth2PushedAuthorizationDiscoveryOptions
+}
+
+type OAuth2WellKnownSignedConfiguration struct {
+	OAuth2WellKnownConfiguration
+
+	/*
+			A JWT containing metadata values about the authorization server as claims. This is a string value consisting of
+		    the entire signed JWT. A "signed_metadata" metadata value SHOULD NOT appear as a claim in the JWT.
+	*/
+	SignedMetadata string `json:"signed_metadata,omitempty"`
+}
+
+type OAuth2WellKnownClaims struct {
+	OAuth2WellKnownSignedConfiguration
+
+	jwt.RegisteredClaims
 }
 
 // OpenIDConnectWellKnownConfiguration represents the well known discovery document specific to OpenID Connect.
@@ -918,3 +957,36 @@ type OpenIDConnectWellKnownConfiguration struct {
 	*OpenIDConnectJWTSecuredAuthorizationResponseModeDiscoveryOptions
 	*OpenIDFederationDiscoveryOptions
 }
+
+type OpenIDConnectWellKnownSignedConfiguration struct {
+	OpenIDConnectWellKnownConfiguration
+
+	/*
+			A JWT containing metadata values about the authorization server as claims. This is a string value consisting of
+		    the entire signed JWT. A "signed_metadata" metadata value SHOULD NOT appear as a claim in the JWT.
+	*/
+	SignedMetadata string `json:"signed_metadata,omitempty"`
+}
+
+type OpenIDConnectWellKnownClaims struct {
+	OpenIDConnectWellKnownSignedConfiguration
+
+	jwt.RegisteredClaims
+}
+
+var (
+	_ Client                                                       = (*RegisteredClient)(nil)
+	_ oauthelia2.Client                                            = (*RegisteredClient)(nil)
+	_ oauthelia2.RotatedClientSecretsClient                        = (*RegisteredClient)(nil)
+	_ oauthelia2.ProofKeyCodeExchangeClient                        = (*RegisteredClient)(nil)
+	_ oauthelia2.ClientAuthenticationPolicyClient                  = (*RegisteredClient)(nil)
+	_ oauthelia2.OpenIDConnectClient                               = (*RegisteredClient)(nil)
+	_ oauthelia2.RefreshFlowScopeClient                            = (*RegisteredClient)(nil)
+	_ oauthelia2.RevokeFlowRevokeRefreshTokensExplicitClient       = (*RegisteredClient)(nil)
+	_ oauthelia2.JARMClient                                        = (*RegisteredClient)(nil)
+	_ oauthelia2.PushedAuthorizationRequestClient                  = (*RegisteredClient)(nil)
+	_ oauthelia2.ResponseModeClient                                = (*RegisteredClient)(nil)
+	_ oauthelia2.ClientCredentialsFlowRequestedScopeImplicitClient = (*RegisteredClient)(nil)
+	_ oauthelia2.RequestedAudienceImplicitClient                   = (*RegisteredClient)(nil)
+	_ oauthelia2.JWTProfileClient                                  = (*RegisteredClient)(nil)
+)

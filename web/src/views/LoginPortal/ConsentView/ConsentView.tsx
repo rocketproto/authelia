@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 
-import { AccountBox, Autorenew, CheckBox, Contacts, Drafts, Group } from "@mui/icons-material";
+import { AccountBox, Autorenew, CheckBox, Contacts, Drafts, Group, LockOpen } from "@mui/icons-material";
 import {
     Button,
     Checkbox,
@@ -39,6 +39,8 @@ function scopeNameToAvatar(id: string) {
             return <Group />;
         case "email":
             return <Drafts />;
+        case "authelia.bearer.authz":
+            return <LockOpen />;
         default:
             return <CheckBox />;
     }
@@ -46,21 +48,26 @@ function scopeNameToAvatar(id: string) {
 
 const ConsentView = function () {
     const styles = useStyles();
+
     const { t: translate } = useTranslation();
+
+    const [userInfo, fetchUserInfo, , fetchUserInfoError] = useUserInfoGET();
+
+    const { createErrorNotification, resetNotification } = useNotifications();
     const navigate = useNavigate();
     const [searchParams] = useSearchParams();
     const redirect = useRedirector();
     const consentID = searchParams.get(Identifier);
-    const { createErrorNotification, resetNotification } = useNotifications();
-    const [response, setResponse] = useState<ConsentGetResponseBody | undefined>(undefined);
+
+    const [response, setResponse] = useState<ConsentGetResponseBody>();
     const [error, setError] = useState<any>(undefined);
     const [preConfigure, setPreConfigure] = useState(false);
+
+    const styles = useStyles();
 
     const handlePreConfigureChanged = () => {
         setPreConfigure((preConfigure) => !preConfigure);
     };
-
-    const [userInfo, fetchUserInfo, , fetchUserInfoError] = useUserInfoGET();
 
     useEffect(() => {
         fetchUserInfo();
@@ -87,9 +94,9 @@ const ConsentView = function () {
 
     useEffect(() => {
         if (fetchUserInfoError) {
-            createErrorNotification("There was an issue retrieving user preferences");
+            createErrorNotification(translate("There was an issue retrieving user preferences"));
         }
-    }, [fetchUserInfoError, resetNotification, createErrorNotification]);
+    }, [fetchUserInfoError, resetNotification, createErrorNotification, translate]);
 
     const translateScopeNameToDescription = (id: string): string => {
         switch (id) {
@@ -103,6 +110,8 @@ const ConsentView = function () {
                 return translate("Access your group membership");
             case "email":
                 return translate("Access your email addresses");
+            case "authelia.bearer.authz":
+                return translate("Access protected resources logged in as you");
             default:
                 return id;
         }
@@ -139,7 +148,6 @@ const ConsentView = function () {
                 id="consent-stage"
                 title={`${translate("Hi")} ${userInfo?.display_name}`}
                 subtitle={translate("Consent Request")}
-                showBrand
             >
                 <Grid container>
                     <Grid item xs={12}>
@@ -165,7 +173,7 @@ const ConsentView = function () {
                         <div className={styles.scopesListContainer}>
                             <List className={styles.scopesList}>
                                 {response?.scopes.map((scope: string) => (
-                                    <Tooltip title={"Scope " + scope}>
+                                    <Tooltip title={translate("Scope", { name: scope })}>
                                         <ListItem id={"scope-" + scope} dense>
                                             <ListItemIcon>{scopeNameToAvatar(scope)}</ListItemIcon>
                                             <ListItemText primary={translateScopeNameToDescription(scope)} />
@@ -178,10 +186,7 @@ const ConsentView = function () {
                     {response?.pre_configuration ? (
                         <Grid item xs={12}>
                             <Tooltip
-                                title={
-                                    translate("This saves this consent as a pre-configured consent for future use") ||
-                                    "This saves this consent as a pre-configured consent for future use"
-                                }
+                                title={translate("This saves this consent as a pre-configured consent for future use")}
                             >
                                 <FormControlLabel
                                     control={

@@ -12,6 +12,8 @@ const (
 	ScopeProfile       = "profile"
 	ScopeEmail         = "email"
 	ScopeGroups        = "groups"
+
+	ScopeAutheliaBearerAuthz = "authelia.bearer.authz"
 )
 
 // Registered Claim strings. See https://www.iana.org/assignments/jwt/jwt.xhtml.
@@ -20,6 +22,7 @@ const (
 	ClaimSessionID                           = "sid"
 	ClaimAccessTokenHash                     = "at_hash"
 	ClaimCodeHash                            = "c_hash"
+	ClaimStateHash                           = "s_hash"
 	ClaimIssuedAt                            = "iat"
 	ClaimNotBefore                           = "nbf"
 	ClaimRequestedAt                         = "rat"
@@ -47,18 +50,14 @@ const (
 )
 
 const (
-	// ClientAssertionJWTBearerType is the JWT bearer assertion.
-	ClientAssertionJWTBearerType = "urn:ietf:params:oauth:client-assertion-type:jwt-bearer" //nolint:gosec // False Positive.
-)
-
-const httpAuthSchemeBasic = "Basic"
-
-const (
-	lifespanTokenDefault                   = time.Hour
-	lifespanRefreshTokenDefault            = time.Hour * 24 * 30
-	lifespanAuthorizeCodeDefault           = time.Minute * 15
-	lifespanJWTSecuredAuthorizationDefault = time.Minute * 5
-	lifespanPARContextDefault              = time.Minute * 5
+	lifespanTokenDefault                      = time.Hour
+	lifespanRefreshTokenDefault               = time.Hour * 24 * 30
+	lifespanAuthorizeCodeDefault              = time.Minute * 15
+	lifespanJWTSecuredAuthorizationDefault    = time.Minute * 5
+	lifespanPARContextDefault                 = time.Minute * 5
+	lifespanRFC8628CodeDefault                = time.Minute * 10
+	lifespanRFC8628PollingIntervalDefault     = time.Second * 10
+	lifespanVerifiableCredentialsNonceDefault = time.Hour
 )
 
 const (
@@ -157,26 +156,15 @@ const (
 )
 
 const (
-	FormParameterState               = "state"
-	FormParameterAuthorizationCode   = "code"
-	FormParameterClientID            = valueClientID
-	FormParameterClientSecret        = "client_secret"
-	FormParameterRequestURI          = "request_uri"
-	FormParameterRedirectURI         = "redirect_uri"
-	FormParameterResponse            = "response"
-	FormParameterResponseMode        = "response_mode"
-	FormParameterResponseType        = "response_type"
-	FormParameterCodeChallenge       = "code_challenge"
-	FormParameterCodeVerifier        = "code_verifier"
-	FormParameterCodeChallengeMethod = "code_challenge_method"
-	FormParameterClientAssertionType = "client_assertion_type"
-	FormParameterClientAssertion     = "client_assertion"
-	FormParameterScope               = valueScope
-	FormParameterAudience            = "audience"
-	FormParameterRefreshToken        = valueRefreshToken
-	FormParameterIssuer              = valueIss
-	FormParameterToken               = "token"
-	FormParameterTokenTypeHint       = "token_type_hint"
+	FormParameterState        = "state"
+	FormParameterClientID     = valueClientID
+	FormParameterRequestURI   = "request_uri"
+	FormParameterRedirectURI  = "redirect_uri"
+	FormParameterResponseMode = "response_mode"
+	FormParameterResponseType = "response_type"
+	FormParameterScope        = valueScope
+	FormParameterIssuer       = valueIss
+	FormParameterPrompt       = "prompt"
 )
 
 const (
@@ -213,20 +201,6 @@ const (
 	JWTHeaderTypeValueAccessTokenJWT        = "at+jwt"
 )
 
-const (
-	headerContentTypeTextHTML        = "text/html; charset=utf-8"
-	headerContentTypeApplicationJSON = "application/json; charset=utf-8"
-)
-
-const (
-	tokenPrefixOrgAutheliaFmt = "authelia_%s_" //nolint:gosec
-	tokenPrefixOrgOryFmt      = "ory_%s_"      //nolint:gosec
-
-	TokenPrefixPartAccessToken   = "at"
-	TokenPrefixPartRefreshToken  = "rt"
-	TokenPrefixPartAuthorizeCode = "ac"
-)
-
 // Paths.
 const (
 	EndpointPathConsent                           = "/consent"
@@ -243,6 +217,8 @@ const (
 	EndpointPathRevocation    = EndpointPathRoot + "/" + EndpointRevocation
 
 	EndpointPathPushedAuthorizationRequest = EndpointPathRoot + "/" + EndpointPushedAuthorizationRequest
+
+	EndpointPathRFC8628UserVerificationURL = EndpointPathRoot + "/device-code/user-verification"
 )
 
 // Authentication Method Reference Values https://datatracker.ietf.org/doc/html/rfc8176
@@ -308,8 +284,8 @@ const (
 	AMRPasswordBasedAuthentication = "pwd"
 
 	// AMROneTimePassword is an RFC8176 Authentication Method Reference Value that represents authentication via a
-	// one-time password as per RFC4949. One-time password specifications that this authentication method applies to
-	// include RFC4226 and RFC6238.
+	// Time-based One-Time Password as per RFC4949. One-time password specifications that this authentication method
+	// applies to include RFC4226 and RFC6238.
 	//
 	// Authelia utilizes this when a user has used TOTP to authenticate. Factor: Have, Channel: Browser.
 	//
@@ -352,4 +328,11 @@ const (
 
 const (
 	durationZero = time.Duration(0)
+)
+
+const (
+	fieldRFC6750Error            = "error"
+	fieldRFC6750ErrorDescription = "error_description"
+	fieldRFC6750Realm            = "realm"
+	fieldRFC6750Scope            = valueScope
 )

@@ -7,8 +7,8 @@ import (
 	"net/url"
 	"strings"
 
+	oauthelia2 "authelia.com/provider/oauth2"
 	"github.com/google/uuid"
-	"github.com/ory/fosite"
 
 	"github.com/authelia/authelia/v4/internal/middlewares"
 	"github.com/authelia/authelia/v4/internal/model"
@@ -19,7 +19,7 @@ import (
 
 func handleOIDCAuthorizationConsentModePreConfigured(ctx *middlewares.AutheliaCtx, issuer *url.URL, client oidc.Client,
 	userSession session.UserSession, subject uuid.UUID,
-	rw http.ResponseWriter, r *http.Request, requester fosite.AuthorizeRequester) (consent *model.OAuth2ConsentSession, handled bool) {
+	rw http.ResponseWriter, r *http.Request, requester oauthelia2.AuthorizeRequester) (consent *model.OAuth2ConsentSession, handled bool) {
 	var (
 		consentID uuid.UUID
 		err       error
@@ -45,7 +45,7 @@ func handleOIDCAuthorizationConsentModePreConfigured(ctx *middlewares.AutheliaCt
 
 func handleOIDCAuthorizationConsentModePreConfiguredWithID(ctx *middlewares.AutheliaCtx, issuer *url.URL, client oidc.Client,
 	userSession session.UserSession, subject uuid.UUID, consentID uuid.UUID,
-	rw http.ResponseWriter, r *http.Request, requester fosite.AuthorizeRequester) (consent *model.OAuth2ConsentSession, handled bool) {
+	rw http.ResponseWriter, r *http.Request, requester oauthelia2.AuthorizeRequester) (consent *model.OAuth2ConsentSession, handled bool) {
 	var (
 		config *model.OAuth2ConsentPreConfig
 		err    error
@@ -111,7 +111,7 @@ func handleOIDCAuthorizationConsentModePreConfiguredWithID(ctx *middlewares.Auth
 		if consent.Responded() {
 			ctx.Logger.Errorf(logFmtErrConsentCantGrantRejected, requester.GetID(), client.GetID(), client.GetConsentPolicy(), consent.ChallengeID)
 
-			ctx.Providers.OpenIDConnect.WriteAuthorizeError(ctx, rw, requester, fosite.ErrAccessDenied)
+			ctx.Providers.OpenIDConnect.WriteAuthorizeError(ctx, rw, requester, oauthelia2.ErrAccessDenied)
 
 			return nil, true
 		}
@@ -121,12 +121,20 @@ func handleOIDCAuthorizationConsentModePreConfiguredWithID(ctx *middlewares.Auth
 		return nil, true
 	}
 
+	if requester.GetRequestForm().Get(oidc.FormParameterPrompt) == oidc.PromptNone {
+		ctx.Logger.Errorf("Authorization Request with id '%s' on client with id '%s' could not be processed: the 'prompt' type of 'none' was requested but client is configured to require consent or pre-configured consent and the pre-configured consent was absent", requester.GetID(), client.GetID())
+
+		ctx.Providers.OpenIDConnect.WriteAuthorizeError(ctx, rw, requester, oauthelia2.ErrConsentRequired)
+
+		return nil, true
+	}
+
 	return consent, false
 }
 
 func handleOIDCAuthorizationConsentModePreConfiguredWithoutID(ctx *middlewares.AutheliaCtx, issuer *url.URL, client oidc.Client,
 	userSession session.UserSession, subject uuid.UUID,
-	rw http.ResponseWriter, r *http.Request, requester fosite.AuthorizeRequester) (consent *model.OAuth2ConsentSession, handled bool) {
+	rw http.ResponseWriter, r *http.Request, requester oauthelia2.AuthorizeRequester) (consent *model.OAuth2ConsentSession, handled bool) {
 	var (
 		config *model.OAuth2ConsentPreConfig
 		err    error
@@ -141,11 +149,19 @@ func handleOIDCAuthorizationConsentModePreConfiguredWithoutID(ctx *middlewares.A
 	}
 
 	if config == nil {
+		if requester.GetRequestForm().Get(oidc.FormParameterPrompt) == oidc.PromptNone {
+			ctx.Logger.Errorf("Authorization Request with id '%s' on client with id '%s' could not be processed: the 'prompt' type of 'none' was requested but client is configured to require consent or pre-configured consent and the pre-configured consent was absent", requester.GetID(), client.GetID())
+
+			ctx.Providers.OpenIDConnect.WriteAuthorizeError(ctx, rw, requester, oauthelia2.ErrConsentRequired)
+
+			return nil, true
+		}
+
 		return handleOIDCAuthorizationConsentGenerate(ctx, issuer, client, userSession, subject, rw, r, requester)
 	}
 
-	if consent, err = model.NewOAuth2ConsentSession(subject, requester); err != nil {
-		ctx.Logger.Errorf(logFmtErrConsentGenerate, requester.GetID(), client.GetID(), client.GetConsentPolicy(), err)
+	if consent, err = handleOpenIDConnectNewConsentSession(subject, requester, ctx.Providers.OpenIDConnect.GetPushedAuthorizeRequestURIPrefix(ctx)); err != nil {
+		ctx.Logger.Errorf(logFmtErrConsentGenerateError, requester.GetID(), client.GetID(), client.GetConsentPolicy(), "generating", err)
 
 		ctx.Providers.OpenIDConnect.WriteAuthorizeError(ctx, rw, requester, oidc.ErrConsentCouldNotGenerate)
 
@@ -183,7 +199,7 @@ func handleOIDCAuthorizationConsentModePreConfiguredWithoutID(ctx *middlewares.A
 	return consent, false
 }
 
-func handleOIDCAuthorizationConsentModePreConfiguredGetPreConfig(ctx *middlewares.AutheliaCtx, client oidc.Client, subject uuid.UUID, requester fosite.Requester) (config *model.OAuth2ConsentPreConfig, err error) {
+func handleOIDCAuthorizationConsentModePreConfiguredGetPreConfig(ctx *middlewares.AutheliaCtx, client oidc.Client, subject uuid.UUID, requester oauthelia2.Requester) (config *model.OAuth2ConsentPreConfig, err error) {
 	var (
 		rows *storage.ConsentPreConfigRows
 	)
@@ -200,7 +216,7 @@ func handleOIDCAuthorizationConsentModePreConfiguredGetPreConfig(ctx *middleware
 		}
 	}()
 
-	scopes, audience := getOIDCExpectedScopesAndAudienceFromRequest(requester)
+	scopes, audience := requester.GetRequestedScopes(), requester.GetRequestedAudience()
 
 	for rows.Next() {
 		if config, err = rows.Get(); err != nil {
@@ -212,9 +228,11 @@ func handleOIDCAuthorizationConsentModePreConfiguredGetPreConfig(ctx *middleware
 
 			return config, nil
 		}
+
+		ctx.Logger.Debugf("Authorization Request with id '%s' on client with id '%s' using consent mode '%s' request with scopes '%s' and audience '%s' did not match pre-configured consent with scopes '%s' and audience '%s'", requester.GetID(), client.GetID(), client.GetConsentPolicy(), strings.Join(scopes, " "), strings.Join(audience, " "), strings.Join(config.Scopes, " "), strings.Join(config.Audience, " "))
 	}
 
-	ctx.Logger.Debugf(logFmtDbgConsentPreConfUnsuccessfulLookup, requester.GetID(), client.GetID(), client.GetConsentPolicy(), client.GetID(), subject, strings.Join(requester.GetRequestedScopes(), " "))
+	ctx.Logger.Debugf(logFmtDbgConsentPreConfUnsuccessfulLookup, requester.GetID(), client.GetID(), client.GetConsentPolicy(), client.GetID(), subject, strings.Join(scopes, " "), strings.Join(audience, " "))
 
 	return nil, nil
 }

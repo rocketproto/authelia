@@ -27,8 +27,7 @@ const (
 )
 
 const (
-	rs256 = "rs256"
-	es512 = "es512"
+	abc = "abc"
 )
 
 func MustDecodeSecret(value string) *schema.PasswordDigest {

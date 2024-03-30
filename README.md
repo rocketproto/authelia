@@ -72,7 +72,7 @@ This is a list of the key features of Authelia:
 * Compatible with [Traefik](https://doc.traefik.io/traefik) out of the box using the
   [ForwardAuth](https://doc.traefik.io/traefik/middlewares/http/forwardauth/) middleware.
 * Curated configuration from [LinuxServer](https://www.linuxserver.io/) via their
-  [Swag](https://docs.linuxserver.io/general/swag) container as well as a
+  [SWAG](https://docs.linuxserver.io/general/swag) container as well as a
   [guide](https://blog.linuxserver.io/2020/08/26/setting-up-authelia/).
 * Compatible with [Caddy] using the [forward_auth](https://caddyserver.com/docs/caddyfile/directives/forward_auth)
   directive.
@@ -83,7 +83,7 @@ This is a list of the key features of Authelia:
     * [Traefik Kubernetes Ingress](https://www.authelia.com/integration/kubernetes/traefik-ingress/#ingress)
     * [Istio](https://www.authelia.com/integration/kubernetes/istio/)
   * Beta support for installing via Helm using our [Charts](https://charts.authelia.com).
-* Beta support for [OpenID Connect](https://www.authelia.com/roadmap/active/openid-connect/).
+* Beta support for [OAuth 2.0 and OpenID Connect 1.0](https://www.authelia.com/roadmap/active/openid-connect/).
 
 For more details take a look at the [Overview](https://www.authelia.com/overview/prologue/introduction/).
 
@@ -125,7 +125,7 @@ will not scale well.
 ## Deployment
 
 Now that you have tested **Authelia** and you want to try it out in your own infrastructure,
-you can learn how to deploy and use it with [Deployment](https://www.authelia.com/docs/deployment/deployment-ha).
+you can learn how to deploy and use it with [Deployment](https://www.authelia.com/integration/deployment/introduction/).
 This guide will show you how to deploy it on bare metal as well as on
 [Kubernetes](https://kubernetes.io/).
 
@@ -134,8 +134,8 @@ This guide will show you how to deploy it on bare metal as well as on
 Authelia takes security very seriously. If you discover a vulnerability in Authelia, please see our
 [Security Policy](https://github.com/authelia/authelia/security/policy).
 
-For more information about [security](https://www.authelia.com/information/security/) related matters, please read
-[the documentation](https://www.authelia.com/information/security/).
+For more information about [security](https://www.authelia.com/policies/security/) related matters, please read
+[the documentation](https://www.authelia.com/policies/security/).
 
 ## Contact Options
 
@@ -341,17 +341,17 @@ Authelia.
 
 #### Balto
 
-Thank you to [<img src="https://www.authelia.com/images/logos/balto.svg" alt="Balto" width="32"> Balto](https://www.getbalto.com/)
+Thank you to [<img src="https://www.authelia.com/svgs/logos/balto.svg" alt="Balto" width="32"> Balto](https://www.getbalto.com/)
 for hosting our apt repository.
 
 #### JetBrains
 
-Thank you to [<img src="https://www.authelia.com/images/logos/jetbrains.svg" alt="JetBrains" width="32"> JetBrains](https://www.jetbrains.com/?from=Authelia)
+Thank you to [<img src="https://www.authelia.com/svgs/logos/jetbrains.svg" alt="JetBrains" width="32"> JetBrains](https://www.jetbrains.com/?from=Authelia)
 for providing us with free licenses to their great tools.
 
-* [<img src="https://www.authelia.com/images/logos/intellij-idea.svg" alt="IDEA" width="32"> IDEA](http://www.jetbrains.com/idea/)
-* [<img src="https://www.authelia.com/images/logos/goland.svg" alt="GoLand" width="32"> GoLand](http://www.jetbrains.com/go/)
-* [<img src="https://www.authelia.com/images/logos/webstorm.svg" alt="WebStorm" width="32"> WebStorm](http://www.jetbrains.com/webstorm/)
+* [<img src="https://www.authelia.com/svgs/logos/intellij-idea.svg" alt="IDEA" width="32"> IDEA](http://www.jetbrains.com/idea/)
+* [<img src="https://www.authelia.com/svgs/logos/goland.svg" alt="GoLand" width="32"> GoLand](http://www.jetbrains.com/go/)
+* [<img src="https://www.authelia.com/svgs/logos/webstorm.svg" alt="WebStorm" width="32"> WebStorm](http://www.jetbrains.com/webstorm/)
 
 #### Microsoft
 
@@ -359,9 +359,9 @@ Our pipeline agents which we rely on for productivity are hosted on [Azure](http
 and our [git repositories](https://github.com/authelia) are hosted on [GitHub](https://github.com/?from=Authela)
 which are both [Microsoft](https://www.microsoft.com/?from=Authelia) products.
 
-[<img src="https://www.authelia.com/images/logos/microsoft.svg" alt="microsoft" height="32">](https://www.microsoft.com/?from=Authelia)
+[<img src="https://www.authelia.com/svgs/logos/microsoft.svg" alt="microsoft" height="32">](https://www.microsoft.com/?from=Authelia)
 
-[<img src="https://www.authelia.com/images/logos/azure.svg" alt="Azure" height="32">](https://azure.microsoft.com/?from=Authelia)
+[<img src="https://www.authelia.com/svgs/logos/azure.svg" alt="Azure" height="32">](https://azure.microsoft.com/?from=Authelia)
 
 ### Open Collective
 

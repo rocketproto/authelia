@@ -3,8 +3,8 @@ package configuration
 import (
 	"fmt"
 
+	"github.com/go-viper/mapstructure/v2"
 	"github.com/knadh/koanf/v2"
-	"github.com/mitchellh/mapstructure"
 
 	"github.com/authelia/authelia/v4/internal/configuration/schema"
 )
@@ -35,7 +35,7 @@ func LoadAdvanced(val *schema.StructValidator, path string, result any, sources 
 
 	var final *koanf.Koanf
 
-	if final, err = koanfRemapKeys(val, ko, deprecations); err != nil {
+	if final, err = koanfRemapKeys(val, ko, deprecations, deprecationsMKM); err != nil {
 		return koanfGetKeys(ko), err
 	}
 
@@ -69,6 +69,7 @@ func unmarshal(ko *koanf.Koanf, val *schema.StructValidator, path string, o any)
 				StringToTLSVersionHookFunc(),
 				StringToPasswordDigestHookFunc(),
 				ToTimeDurationHookFunc(),
+				ToRefreshIntervalDurationHookFunc(),
 			),
 			Metadata:         nil,
 			Result:           o,

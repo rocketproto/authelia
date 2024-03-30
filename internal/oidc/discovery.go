@@ -126,7 +126,7 @@ func NewOpenIDConnectWellKnownConfiguration(c *schema.IdentityProvidersOpenIDCon
 				},
 			},
 			OAuth2PushedAuthorizationDiscoveryOptions: &OAuth2PushedAuthorizationDiscoveryOptions{
-				RequirePushedAuthorizationRequests: c.PAR.Enforce,
+				RequirePushedAuthorizationRequests: c.RequirePushedAuthorizationRequests,
 			},
 			OAuth2IssuerIdentificationDiscoveryOptions: &OAuth2IssuerIdentificationDiscoveryOptions{
 				AuthorizationResponseIssuerParameterSupported: true,
@@ -154,6 +154,9 @@ func NewOpenIDConnectWellKnownConfiguration(c *schema.IdentityProvidersOpenIDCon
 				SigningAlgRSAPSSUsingSHA512,
 				SigningAlgNone,
 			},
+			RequestParameterSupported:     true,
+			RequestURIParameterSupported:  true,
+			RequireRequestURIRegistration: true,
 		},
 		OpenIDConnectPromptCreateDiscoveryOptions: &OpenIDConnectPromptCreateDiscoveryOptions{
 			PromptValuesSupported: []string{

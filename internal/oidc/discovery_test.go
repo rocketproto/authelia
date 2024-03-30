@@ -27,7 +27,7 @@ func TestNewOpenIDConnectWellKnownConfiguration(t *testing.T) {
 		{
 			desc:                                  "ShouldHaveStandardCodeChallengeMethods",
 			pkcePlainChallenge:                    false,
-			clients:                               map[string]oidc.Client{"a": &oidc.BaseClient{}},
+			clients:                               map[string]oidc.Client{"a": &oidc.RegisteredClient{}},
 			expectCodeChallengeMethodsSupported:   []string{oidc.PKCEChallengeMethodSHA256},
 			expectSubjectTypesSupported:           []string{oidc.SubjectTypePublic, oidc.SubjectTypePairwise},
 			expectedIDTokenSigAlgsSupported:       []string{oidc.SigningAlgRSAUsingSHA256, oidc.SigningAlgNone},
@@ -39,7 +39,7 @@ func TestNewOpenIDConnectWellKnownConfiguration(t *testing.T) {
 		{
 			desc:                                  "ShouldHaveAllCodeChallengeMethods",
 			pkcePlainChallenge:                    true,
-			clients:                               map[string]oidc.Client{"a": &oidc.BaseClient{}},
+			clients:                               map[string]oidc.Client{"a": &oidc.RegisteredClient{}},
 			expectCodeChallengeMethodsSupported:   []string{oidc.PKCEChallengeMethodSHA256, oidc.PKCEChallengeMethodPlain},
 			expectSubjectTypesSupported:           []string{oidc.SubjectTypePublic, oidc.SubjectTypePairwise},
 			expectedIDTokenSigAlgsSupported:       []string{oidc.SigningAlgRSAUsingSHA256, oidc.SigningAlgNone},
@@ -51,7 +51,7 @@ func TestNewOpenIDConnectWellKnownConfiguration(t *testing.T) {
 		{
 			desc:               "ShouldIncludeDiscoveredResponseObjectSigningAlgs",
 			pkcePlainChallenge: false,
-			clients:            map[string]oidc.Client{"a": &oidc.BaseClient{}},
+			clients:            map[string]oidc.Client{"a": &oidc.RegisteredClient{}},
 			discovery: schema.IdentityProvidersOpenIDConnectDiscovery{
 				ResponseObjectSigningAlgs: []string{oidc.SigningAlgECDSAUsingP521AndSHA512},
 			},
@@ -68,11 +68,9 @@ func TestNewOpenIDConnectWellKnownConfiguration(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.desc, func(t *testing.T) {
 			c := schema.IdentityProvidersOpenIDConnect{
-				EnablePKCEPlainChallenge: tc.pkcePlainChallenge,
-				PAR: schema.IdentityProvidersOpenIDConnectPAR{
-					Enforce: tc.enforcePAR,
-				},
-				Discovery: tc.discovery,
+				EnablePKCEPlainChallenge:           tc.pkcePlainChallenge,
+				RequirePushedAuthorizationRequests: tc.enforcePAR,
+				Discovery:                          tc.discovery,
 			}
 
 			actual := oidc.NewOpenIDConnectWellKnownConfiguration(&c)
@@ -393,7 +391,6 @@ func TestNewOpenIDConnectWellKnownConfiguration_Copy(t *testing.T) {
 				ServiceDocumentation:                       "",
 				OPPolicyURI:                                "",
 				OPTOSURI:                                   "",
-				SignedMetadata:                             "",
 			},
 			OAuth2DiscoveryOptions: oidc.OAuth2DiscoveryOptions{
 				IntrospectionEndpoint:                              "",
@@ -454,9 +451,9 @@ func TestNewOpenIDConnectWellKnownConfiguration_Copy(t *testing.T) {
 			DisplayValuesSupported:                    nil,
 			ClaimTypesSupported:                       nil,
 			ClaimLocalesSupported:                     nil,
-			RequestParameterSupported:                 false,
-			RequestURIParameterSupported:              false,
-			RequireRequestURIRegistration:             false,
+			RequestParameterSupported:                 true,
+			RequestURIParameterSupported:              true,
+			RequireRequestURIRegistration:             true,
 			ClaimsParameterSupported:                  false,
 		},
 		OpenIDConnectFrontChannelLogoutDiscoveryOptions: &oidc.OpenIDConnectFrontChannelLogoutDiscoveryOptions{
@@ -491,7 +488,7 @@ func TestNewOpenIDConnectWellKnownConfiguration_Copy(t *testing.T) {
 			FederationRegistrationEndpoint:                 "",
 			ClientRegistrationTypesSupported:               nil,
 			RequestAuthenticationMethodsSupported:          nil,
-			RequestAuthenticationSigningAlgValuesSupproted: nil,
+			RequestAuthenticationSigningAlgValuesSupported: nil,
 		},
 	}
 

@@ -71,6 +71,8 @@ func NewCmdCtxConfig() *CmdCtxConfig {
 
 // CmdCtxConfig is the configuration for the CmdCtx.
 type CmdCtxConfig struct {
+	files     []string
+	filters   []string
 	defaults  configuration.Source
 	sources   []configuration.Source
 	keys      []string
@@ -219,7 +221,7 @@ func (ctx *CmdCtx) HelperConfigValidateKeysRunE(_ *cobra.Command, _ []string) (e
 		return fmt.Errorf("HelperConfigValidateKeysRunE must be used with HelperConfigLoadRunE")
 	}
 
-	validator.ValidateKeys(ctx.cconfig.keys, configuration.DefaultEnvPrefix, ctx.cconfig.validator)
+	validator.ValidateKeys(ctx.cconfig.keys, configuration.GetMultiKeyMappedDeprecationKeys(), configuration.DefaultEnvPrefix, ctx.cconfig.validator)
 
 	return nil
 }
@@ -250,9 +252,12 @@ func (ctx *CmdCtx) LogConfigure(_ *cobra.Command, _ []string) (err error) {
 
 	config.KeepStdout = true
 
-	if err = logging.InitializeLogger(config, false); err != nil {
+	if err = logging.InitializeLogger(schema.Log{Level: ctx.config.Log.Level}, false); err != nil {
 		return fmt.Errorf("Cannot initialize logger: %w", err)
 	}
+
+	ctx.log.WithFields(map[string]any{"filters": ctx.cconfig.filters, "files": ctx.cconfig.files}).Debug("Loaded Configuration Sources")
+	ctx.log.WithFields(map[string]any{"level": ctx.config.Log.Level, "format": ctx.config.Log.Format, "file": ctx.config.Log.FilePath, "keep_stdout": ctx.config.Log.KeepStdout}).Debug("Logging Initialized")
 
 	return nil
 }
@@ -385,21 +390,25 @@ func (ctx *CmdCtx) ConfigEnsureExistsRunE(cmd *cobra.Command, _ []string) (err e
 // HelperConfigLoadRunE loads the configuration into the CmdCtx.
 func (ctx *CmdCtx) HelperConfigLoadRunE(cmd *cobra.Command, _ []string) (err error) {
 	var (
-		configs []string
-
 		filters []configuration.BytesFilter
 	)
-
-	if configs, filters, err = loadXEnvCLIConfigValues(cmd); err != nil {
-		return err
-	}
 
 	if ctx.cconfig == nil {
 		ctx.cconfig = NewCmdCtxConfig()
 	}
 
+	if ctx.cconfig.files, filters, err = loadXEnvCLIConfigValues(cmd); err != nil {
+		return err
+	}
+
+	ctx.cconfig.filters = make([]string, len(filters))
+
+	for i, filter := range filters {
+		ctx.cconfig.filters[i] = filter.Name()
+	}
+
 	ctx.cconfig.sources = configuration.NewDefaultSourcesWithDefaults(
-		configs,
+		ctx.cconfig.files,
 		filters,
 		configuration.DefaultEnvPrefix,
 		configuration.DefaultEnvDelimiter,

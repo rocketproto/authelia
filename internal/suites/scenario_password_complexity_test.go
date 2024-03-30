@@ -18,8 +18,7 @@ func NewPasswordComplexityScenario() *PasswordComplexityScenario {
 }
 
 func (s *PasswordComplexityScenario) SetupSuite() {
-	browser, err := StartRod()
-
+	browser, err := NewRodSession(RodSessionWithCredentials(s))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -57,7 +56,6 @@ func (s *PasswordComplexityScenario) TestShouldRejectPasswordReset() {
 
 	// Attempt to reset the password to a.
 	s.doResetPassword(s.T(), s.Context(ctx), "john", "a", "a", true)
-	s.verifyNotificationDisplayed(s.T(), s.Context(ctx), "Your supplied password does not meet the password policy requirements.")
 }
 
 func TestRunPasswordComplexityScenario(t *testing.T) {

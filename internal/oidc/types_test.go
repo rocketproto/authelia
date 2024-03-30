@@ -2,22 +2,21 @@ package oidc_test
 
 import (
 	"context"
-	"errors"
 	"net/url"
 	"testing"
 	"time"
 
+	oauthelia2 "authelia.com/provider/oauth2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
-	"github.com/ory/fosite"
-	"github.com/ory/fosite/handler/openid"
-	fjwt "github.com/ory/fosite/token/jwt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/authelia/authelia/v4/internal/clock"
+	"github.com/authelia/authelia/v4/internal/configuration/schema"
 	"github.com/authelia/authelia/v4/internal/model"
 	"github.com/authelia/authelia/v4/internal/oidc"
+	"github.com/authelia/authelia/v4/internal/random"
 )
 
 func TestNewSession(t *testing.T) {
@@ -43,11 +42,11 @@ func TestNewSessionWithAuthorizeRequest(t *testing.T) {
 
 	formValues.Set(oidc.ClaimNonce, "abc123xyzauthelia")
 
-	request := &fosite.AuthorizeRequest{
-		Request: fosite.Request{
+	request := &oauthelia2.AuthorizeRequest{
+		Request: oauthelia2.Request{
 			ID:     requestID.String(),
 			Form:   formValues,
-			Client: &oidc.BaseClient{ID: "example"},
+			Client: &oidc.RegisteredClient{ID: "example"},
 		},
 	}
 
@@ -108,101 +107,6 @@ func TestNewSessionWithAuthorizeRequest(t *testing.T) {
 	assert.Nil(t, session.Claims.AuthenticationMethodsReferences)
 }
 
-func TestPopulateClientCredentialsFlowSessionWithAccessRequest(t *testing.T) {
-	testCases := []struct {
-		name     string
-		setup    func(ctx oidc.Context)
-		ctx      oidc.Context
-		request  fosite.AccessRequester
-		have     *oidc.Session
-		expected *oidc.Session
-		err      string
-	}{
-		{
-			"ShouldHandleIssuerError",
-			nil,
-			&TestContext{
-				IssuerURLFunc: func() (issuerURL *url.URL, err error) {
-					return nil, errors.New("an error")
-				},
-			},
-			&fosite.AccessRequest{},
-			oidc.NewSession(),
-			nil,
-			"The authorization server encountered an unexpected condition that prevented it from fulfilling the request. Failed to determine the issuer with error: an error.",
-		},
-		{
-			"ShouldHandleClientError",
-			nil,
-			&TestContext{
-				IssuerURLFunc: func() (issuerURL *url.URL, err error) {
-					return &url.URL{Scheme: "https", Host: "example.com"}, nil
-				},
-			},
-			&fosite.AccessRequest{},
-			oidc.NewSession(),
-			nil,
-			"The authorization server encountered an unexpected condition that prevented it from fulfilling the request. Failed to get the client for the request.",
-		},
-		{
-			"ShouldUpdateValues",
-			func(ctx oidc.Context) {
-				c := ctx.(*TestContext)
-
-				c.Clock = clock.NewFixed(time.Unix(10000000000, 0))
-			},
-			&TestContext{
-				IssuerURLFunc: func() (issuerURL *url.URL, err error) {
-					return &url.URL{Scheme: "https", Host: "example.com"}, nil
-				},
-			},
-			&fosite.AccessRequest{
-				Request: fosite.Request{
-					Client: &oidc.BaseClient{
-						ID: "abc",
-					},
-				},
-			},
-			oidc.NewSession(),
-			&oidc.Session{
-				Extra: map[string]any{},
-				DefaultSession: &openid.DefaultSession{
-					Headers: &fjwt.Headers{
-						Extra: map[string]any{},
-					},
-					Claims: &fjwt.IDTokenClaims{
-						Issuer:      "https://example.com",
-						IssuedAt:    time.Unix(10000000000, 0).UTC(),
-						RequestedAt: time.Unix(10000000000, 0).UTC(),
-						Subject:     "abc",
-						Extra:       map[string]any{},
-					},
-				},
-				ClientID: "abc",
-			},
-			"",
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			if tc.setup != nil {
-				tc.setup(tc.ctx)
-			}
-
-			err := oidc.PopulateClientCredentialsFlowSessionWithAccessRequest(tc.ctx, tc.request, tc.have, nil)
-
-			assert.Equal(t, "", tc.have.GetSubject())
-			if len(tc.err) == 0 {
-				assert.NoError(t, err)
-				assert.EqualValues(t, tc.expected, tc.have)
-			} else {
-				assert.EqualError(t, oidc.ErrorToDebugRFC6749Error(err), tc.err)
-			}
-		})
-	}
-}
-
 // TestContext is a minimal implementation of Context for the purpose of testing.
 type TestContext struct {
 	context.Context
@@ -210,6 +114,15 @@ type TestContext struct {
 	MockIssuerURL *url.URL
 	IssuerURLFunc func() (issuerURL *url.URL, err error)
 	Clock         clock.Provider
+	Config        schema.Configuration
+}
+
+func (m *TestContext) GetRandom() (r random.Provider) {
+	return random.NewMathematical()
+}
+
+func (m *TestContext) GetConfiguration() (config schema.Configuration) {
+	return m.Config
 }
 
 // IssuerURL returns the MockIssuerURL.
@@ -254,10 +167,10 @@ func (m *TestCodeStrategy) AuthorizeCodeSignature(ctx context.Context, token str
 	return m.signature
 }
 
-func (m *TestCodeStrategy) GenerateAuthorizeCode(ctx context.Context, requester fosite.Requester) (token string, signature string, err error) {
+func (m *TestCodeStrategy) GenerateAuthorizeCode(ctx context.Context, requester oauthelia2.Requester) (token string, signature string, err error) {
 	return "", "", nil
 }
 
-func (m *TestCodeStrategy) ValidateAuthorizeCode(ctx context.Context, requester fosite.Requester, token string) (err error) {
+func (m *TestCodeStrategy) ValidateAuthorizeCode(ctx context.Context, requester oauthelia2.Requester, token string) (err error) {
 	return nil
 }

@@ -23,8 +23,7 @@ func New1FAScenario() *OneFactorSuite {
 }
 
 func (s *OneFactorSuite) SetupSuite() {
-	browser, err := StartRod()
-
+	browser, err := NewRodSession(RodSessionWithCredentials(s))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -114,7 +113,7 @@ func (s *OneFactorSuite) TestShouldDenyAccessOnBadPassword() {
 	targetURL := fmt.Sprintf("%s/secret.html", AdminBaseURL)
 	s.doLoginOneFactor(s.T(), s.Context(ctx), "john", "bad-password", false, BaseDomain, targetURL)
 	s.verifyIsFirstFactorPage(s.T(), s.Context(ctx))
-	s.verifyNotificationDisplayed(s.T(), s.Context(ctx), "Incorrect username or password.")
+	s.verifyNotificationDisplayed(s.T(), s.Context(ctx), "Incorrect username or password")
 }
 
 func (s *OneFactorSuite) TestShouldDenyAccessOnForbidden() {
@@ -126,6 +125,8 @@ func (s *OneFactorSuite) TestShouldDenyAccessOnForbidden() {
 
 	targetURL := fmt.Sprintf("%s/secret.html", DenyBaseURL)
 	s.doVisit(s.T(), s.Context(ctx), targetURL)
+	s.NoError(s.WaitStable(time.Millisecond * 10))
+
 	s.verifyURLIs(s.T(), s.Context(ctx), targetURL)
 	s.verifyBodyContains(s.T(), s.Context(ctx), "403 Forbidden")
 }

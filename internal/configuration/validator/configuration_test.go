@@ -17,7 +17,10 @@ func newDefaultConfig() schema.Configuration {
 	config.Server.Address = &schema.AddressTCP{Address: schema.NewAddressFromNetworkValues("tcp", loopback, 9090)}
 	config.Log.Level = "info"
 	config.Log.Format = "text"
-	config.JWTSecret = testJWTSecret
+	config.IdentityValidation.ResetPassword = schema.IdentityValidationResetPassword{
+		JWTSecret: testJWTSecret,
+	}
+
 	config.AuthenticationBackend.File = &schema.AuthenticationBackendFile{
 		Path: "/a/path",
 	}
@@ -32,7 +35,7 @@ func newDefaultConfig() schema.Configuration {
 					Name: "authelia_session",
 				},
 				Domain:      exampleDotCom,
-				AutheliaURL: &url.URL{Scheme: "https", Host: "auth." + exampleDotCom},
+				AutheliaURL: &url.URL{Scheme: schemeHTTPS, Host: authdot + exampleDotCom},
 			},
 		},
 	}
@@ -86,19 +89,6 @@ func TestShouldAddDefaultAccessControl(t *testing.T) {
 	assert.Equal(t, "deny", config.AccessControl.DefaultPolicy)
 }
 
-func TestShouldRaiseErrorWithUndefinedJWTSecretKey(t *testing.T) {
-	validator := schema.NewStructValidator()
-	config := newDefaultConfig()
-	config.JWTSecret = ""
-
-	ValidateConfiguration(&config, validator)
-	require.Len(t, validator.Errors(), 1)
-	require.Len(t, validator.Warnings(), 1)
-
-	assert.EqualError(t, validator.Errors()[0], "option 'jwt_secret' is required")
-	assert.EqualError(t, validator.Warnings()[0], "access_control: no rules have been specified so the 'default_policy' of 'two_factor' is going to be applied to all requests")
-}
-
 func TestShouldRaiseErrorWithBadDefaultRedirectionURL(t *testing.T) {
 	validator := schema.NewStructValidator()
 	config := newDefaultConfig()
@@ -129,9 +119,11 @@ func TestShouldRaiseErrorWithLegacyDefaultRedirectionURL(t *testing.T) {
 func TestShouldAllowLegacyDefaultRedirectionURL(t *testing.T) {
 	validator := schema.NewStructValidator()
 	config := newDefaultConfig()
-	config.DefaultRedirectionURL = &url.URL{Scheme: "https", Host: "www.example.com"} //nolint:staticcheck
+
 	config.Session.Cookies = nil
-	config.Session.Domain = "example.com" //nolint:staticcheck
+
+	config.DefaultRedirectionURL = &url.URL{Scheme: "https", Host: "www.example.com"} //nolint:staticcheck
+	config.Session.Domain = "example.com"                                             //nolint:staticcheck
 
 	ValidateConfiguration(&config, validator)
 	require.Len(t, validator.Errors(), 0)
@@ -141,7 +133,7 @@ func TestShouldAllowLegacyDefaultRedirectionURL(t *testing.T) {
 	assert.EqualError(t, validator.Warnings()[1], "session: option 'domain' is deprecated in v4.38.0 and has been replaced by a multi-domain configuration: this has automatically been mapped for you but you will need to adjust your configuration to remove this message and receive the latest messages")
 
 	assert.Equal(t, "example.com", config.Session.Cookies[0].Domain)
-	assert.Equal(t, &url.URL{Scheme: "https", Host: "www.example.com"}, config.Session.Cookies[0].DefaultRedirectionURL)
+	assert.Equal(t, &url.URL{Scheme: schemeHTTPS, Host: "www.example.com"}, config.Session.Cookies[0].DefaultRedirectionURL)
 }
 
 func TestShouldNotOverrideCertificatesDirectoryAndShouldPassWhenBlank(t *testing.T) {

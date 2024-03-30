@@ -19,7 +19,7 @@ func newDefaultSessionConfig() schema.Configuration {
 	config.Cookies = []schema.SessionCookie{
 		{
 			Domain:      exampleDotCom,
-			AutheliaURL: &url.URL{Scheme: "https", Host: "auth.example.com"},
+			AutheliaURL: &url.URL{Scheme: schemeHTTPS, Host: "auth.example.com"},
 		},
 	}
 
@@ -96,7 +96,7 @@ func TestShouldSetDefaultSessionDomainsValues(t *testing.T) {
 								Expiration: time.Hour, Inactivity: time.Minute, RememberMe: time.Hour * 2,
 							},
 							Domain:      exampleDotCom,
-							AutheliaURL: &url.URL{Scheme: "https", Host: "auth." + exampleDotCom},
+							AutheliaURL: &url.URL{Scheme: schemeHTTPS, Host: authdot + exampleDotCom},
 						},
 					},
 				},
@@ -113,7 +113,7 @@ func TestShouldSetDefaultSessionDomainsValues(t *testing.T) {
 								Expiration: time.Hour, Inactivity: time.Minute, RememberMe: time.Hour * 2,
 							},
 							Domain:      exampleDotCom,
-							AutheliaURL: &url.URL{Scheme: "https", Host: "auth." + exampleDotCom},
+							AutheliaURL: &url.URL{Scheme: schemeHTTPS, Host: authdot + exampleDotCom},
 						},
 					},
 				},
@@ -134,14 +134,14 @@ func TestShouldSetDefaultSessionDomainsValues(t *testing.T) {
 					Cookies: []schema.SessionCookie{
 						{
 							Domain:      exampleDotCom,
-							AutheliaURL: &url.URL{Scheme: "https", Host: "auth." + exampleDotCom},
+							AutheliaURL: &url.URL{Scheme: schemeHTTPS, Host: authdot + exampleDotCom},
 						},
 						{
 							SessionCookieCommon: schema.SessionCookieCommon{
 								Name: "authelia_session", SameSite: "strict",
 							},
 							Domain:      "example2.com",
-							AutheliaURL: &url.URL{Scheme: "https", Host: "auth.example2.com"},
+							AutheliaURL: &url.URL{Scheme: schemeHTTPS, Host: "auth.example2.com"},
 						},
 					},
 				},
@@ -159,7 +159,7 @@ func TestShouldSetDefaultSessionDomainsValues(t *testing.T) {
 								Expiration: time.Hour, Inactivity: time.Minute, RememberMe: schema.RememberMeDisabled, DisableRememberMe: true,
 							},
 							Domain:      exampleDotCom,
-							AutheliaURL: &url.URL{Scheme: "https", Host: "auth." + exampleDotCom},
+							AutheliaURL: &url.URL{Scheme: schemeHTTPS, Host: authdot + exampleDotCom},
 						},
 						{
 							SessionCookieCommon: schema.SessionCookieCommon{
@@ -167,7 +167,7 @@ func TestShouldSetDefaultSessionDomainsValues(t *testing.T) {
 								Expiration: time.Hour, Inactivity: time.Minute, RememberMe: schema.RememberMeDisabled, DisableRememberMe: true,
 							},
 							Domain:      "example2.com",
-							AutheliaURL: &url.URL{Scheme: "https", Host: "auth.example2.com"},
+							AutheliaURL: &url.URL{Scheme: schemeHTTPS, Host: "auth.example2.com"},
 						},
 					},
 				},
@@ -213,6 +213,7 @@ func TestShouldSetDefaultSessionDomainsValues(t *testing.T) {
 
 			warns := validator.Warnings()
 			require.Len(t, warns, len(tc.warns))
+
 			for i, err := range warns {
 				assert.EqualError(t, err, tc.warns[i])
 			}
@@ -296,6 +297,27 @@ func TestShouldHandleRedisConfigSuccessfully(t *testing.T) {
 	assert.Len(t, validator.Errors(), 0)
 
 	assert.Equal(t, 8, config.Session.Redis.MaximumActiveConnections)
+}
+
+func TestShouldHandleRedisSocketConfigSuccessfully(t *testing.T) {
+	validator := schema.NewStructValidator()
+	config := newDefaultSessionConfig()
+
+	// Set redis config because password must be set only when redis is used.
+	config.Session.Redis = &schema.SessionRedis{
+		Host:     "/path/to/socket.sock",
+		Port:     0,
+		Password: "password",
+	}
+
+	ValidateSession(&config, validator)
+
+	assert.Len(t, validator.Warnings(), 0)
+	assert.Len(t, validator.Errors(), 0)
+
+	assert.Equal(t, 8, config.Session.Redis.MaximumActiveConnections)
+	assert.Equal(t, 0, config.Session.Redis.Port)
+	assert.Equal(t, "/path/to/socket.sock", config.Session.Redis.Host)
 }
 
 func TestShouldRaiseErrorWithInvalidRedisPortLow(t *testing.T) {
@@ -735,13 +757,26 @@ func TestShouldRaiseErrorWhenHaveNonAbsDefaultRedirectionURL(t *testing.T) {
 			AutheliaURL:           MustParseURL("https://login.example.com"),
 			DefaultRedirectionURL: MustParseURL("home.example.com"),
 		},
+		{
+			Domain:                "example2.com",
+			AutheliaURL:           MustParseURL("https://login.example2.com"),
+			DefaultRedirectionURL: MustParseURL("https://google.com"),
+		},
+		{
+			Legacy:                true,
+			Domain:                "example3.com",
+			AutheliaURL:           MustParseURL("https://login.example3.com"),
+			DefaultRedirectionURL: MustParseURL("https://google.com"),
+		},
 	}
 
 	ValidateSession(&config, validator)
-	assert.False(t, validator.HasWarnings())
-	require.Len(t, validator.Errors(), 2)
+	require.Len(t, validator.Warnings(), 1)
+	require.Len(t, validator.Errors(), 3)
 	assert.EqualError(t, validator.Errors()[0], "session: domain config #1 (domain 'example.com'): option 'default_redirection_url' is not absolute with a value of 'home.example.com'")
 	assert.EqualError(t, validator.Errors()[1], "session: domain config #1 (domain 'example.com'): option 'default_redirection_url' does not share a cookie scope with domain 'example.com' with a value of 'home.example.com'")
+	assert.EqualError(t, validator.Errors()[2], "session: domain config #2 (domain 'example2.com'): option 'default_redirection_url' does not share a cookie scope with domain 'example2.com' with a value of 'https://google.com'")
+	assert.EqualError(t, validator.Warnings()[0], "session: domain config #3 (domain 'example3.com'): option 'default_redirection_url' does not share a cookie scope with domain 'example3.com' with a value of 'https://google.com'")
 }
 
 func TestShouldRaiseErrorWhenHaveNonSecureDefaultRedirectionURL(t *testing.T) {
@@ -833,7 +868,7 @@ func TestShouldRaiseErrorWhenDomainIsInvalid(t *testing.T) {
 			}
 
 			if tc.have != "" {
-				config.Session.Cookies[0].AutheliaURL = &url.URL{Scheme: "https", Host: "auth." + tc.have}
+				config.Session.Cookies[0].AutheliaURL = &url.URL{Scheme: schemeHTTPS, Host: authdot + tc.have}
 			}
 
 			ValidateSession(&config, validator)
@@ -858,8 +893,8 @@ func TestShouldRaiseErrorWhenPortalURLIsInvalid(t *testing.T) {
 		have     string
 		expected []string
 	}{
-		{"ShouldRaiseErrorOnInvalidScope", "https://example2.com/login", []string{"session: domain config #1 (domain 'example.com'): option 'authelia_url' does not share a cookie scope with domain 'example.com' with a value of 'https://example2.com/login'"}},
-		{"ShouldRaiseErrorOnInvalidScheme", "http://example.com/login", []string{"session: domain config #1 (domain 'example.com'): option 'authelia_url' does not have a secure scheme with a value of 'http://example.com/login'"}},
+		{"ShouldRaiseErrorOnInvalidScope", "https://example2.com/login", []string{"session: domain config #1 (domain 'example.com'): option 'authelia_url' does not share a cookie scope with domain 'example.com' with a value of 'https://example2.com/login/'"}},
+		{"ShouldRaiseErrorOnInvalidScheme", "http://example.com/login", []string{"session: domain config #1 (domain 'example.com'): option 'authelia_url' does not have a secure scheme with a value of 'http://example.com/login/'"}},
 	}
 
 	for _, tc := range testCases {

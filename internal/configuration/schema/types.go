@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -90,6 +91,21 @@ func (d *PasswordDigest) IsPlainText() (is bool) {
 		return true
 	default:
 		return false
+	}
+}
+
+// GetPlainTextValue returns a *plaintext.Digest's byte value from Key() and an error. If the PasswordDigest is not a
+// plaintext.Digest then it returns nil and an error, otherwise it returns the value and nil.
+func (d *PasswordDigest) GetPlainTextValue() (value []byte, err error) {
+	if d == nil || d.Digest == nil {
+		return nil, errors.New("error: nil value")
+	}
+
+	switch digest := d.Digest.(type) {
+	case *plaintext.Digest:
+		return digest.Key(), nil
+	default:
+		return nil, errors.New("error: digest isn't plaintext")
 	}
 }
 
@@ -244,7 +260,7 @@ type X509CertificateChain struct {
 func (X509CertificateChain) JSONSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
 		Type:    jsonschema.TypeString,
-		Pattern: `^(-{5}BEGIN CERTIFICATE-{5}\n([a-zA-Z0-9/+]{1,64}\n)+([a-zA-Z0-9/+]{1,64}[=]{0,2})\n-{5}END CERTIFICATE-{5}\n?)+$`,
+		Pattern: `^(-{5}BEGIN CERTIFICATE-{5}\n([a-zA-Z0-9\/+]{1,64}\n)+([a-zA-Z0-9\/+]{1,64}[=]{0,2})\n-{5}END CERTIFICATE-{5}\n?)+$`,
 	}
 }
 
@@ -403,15 +419,84 @@ func (c *X509CertificateChain) Validate() (err error) {
 	return nil
 }
 
+// NewRefreshIntervalDuration returns a RefreshIntervalDuration given a time.Duration.
+func NewRefreshIntervalDuration(value time.Duration) RefreshIntervalDuration {
+	return RefreshIntervalDuration{value: value, valid: true}
+}
+
+// NewRefreshIntervalDurationAlways returns a RefreshIntervalDuration with an always value.
+func NewRefreshIntervalDurationAlways() RefreshIntervalDuration {
+	return RefreshIntervalDuration{valid: true, always: true}
+}
+
+// NewRefreshIntervalDurationNever returns a RefreshIntervalDuration with a never value.
+func NewRefreshIntervalDurationNever() RefreshIntervalDuration {
+	return RefreshIntervalDuration{valid: true, never: true}
+}
+
+// RefreshIntervalDuration is a special time.Duration for the refresh interval.
+type RefreshIntervalDuration struct {
+	value  time.Duration
+	valid  bool
+	always bool
+	never  bool
+}
+
+// Valid returns true if the value was correctly newed up.
+func (d RefreshIntervalDuration) Valid() bool {
+	return d.valid
+}
+
+// Update returns true if the session could require updates.
+func (d RefreshIntervalDuration) Update() bool {
+	return !d.never && !d.always
+}
+
+// Always returns true if the interval is always.
+func (d RefreshIntervalDuration) Always() bool {
+	return d.always
+}
+
+// Never returns true if the interval is never.
+func (d RefreshIntervalDuration) Never() bool {
+	return d.never
+}
+
+// Value returns the time.Duration.
+func (d RefreshIntervalDuration) Value() time.Duration {
+	return d.value
+}
+
+// JSONSchema provides the json-schema formatting.
+func (RefreshIntervalDuration) JSONSchema() *jsonschema.Schema {
+	return &jsonschema.Schema{
+		Default: "5 minutes",
+		OneOf: []*jsonschema.Schema{
+			{
+				Type: jsonschema.TypeString,
+				Enum: []any{"always", "never"},
+			},
+			{
+				Type:    jsonschema.TypeString,
+				Pattern: `^\d+\s*(y|M|w|d|h|m|s|ms|((year|month|week|day|hour|minute|second|millisecond)s?))(\s*\d+\s*(y|M|w|d|h|m|s|ms|((year|month|week|day|hour|minute|second|millisecond)s?)))*$`,
+			},
+			{
+				Type:        jsonschema.TypeInteger,
+				Description: "The duration in seconds",
+			},
+		},
+	}
+}
+
 type AccessControlRuleNetworks []string
 
 func (AccessControlRuleNetworks) JSONSchema() *jsonschema.Schema {
 	return &jsonschemaWeakStringUniqueSlice
 }
 
-type IdentityProvidersOpenIDConnectClientRedirectURIs []string
+type IdentityProvidersOpenIDConnectClientURIs []string
 
-func (IdentityProvidersOpenIDConnectClientRedirectURIs) JSONSchema() *jsonschema.Schema {
+func (IdentityProvidersOpenIDConnectClientURIs) JSONSchema() *jsonschema.Schema {
 	return &jsonschema.Schema{
 		OneOf: []*jsonschema.Schema{
 			&jsonschemaURI,
@@ -535,7 +620,7 @@ var jsonschemaACLNetwork = jsonschema.Schema{
 
 var jsonschemaACLSubject = jsonschema.Schema{
 	Type:    jsonschema.TypeString,
-	Pattern: "^(user|group):.+$",
+	Pattern: "^(user|group|oauth2:client):.+$",
 }
 
 var jsonschemaACLMethod = jsonschema.Schema{

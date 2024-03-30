@@ -1,6 +1,7 @@
 package configuration
 
 import (
+	"crypto/rsa"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -20,7 +21,7 @@ import (
 func TestShouldErrorSecretNotExist(t *testing.T) {
 	dir := t.TempDir()
 
-	testSetEnv(t, "JWT_SECRET_FILE", filepath.Join(dir, "jwt"))
+	testSetEnv(t, "IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE", filepath.Join(dir, "jwt"))
 	testSetEnv(t, "DUO_API_SECRET_KEY_FILE", filepath.Join(dir, "duo"))
 	testSetEnv(t, "SESSION_SECRET_FILE", filepath.Join(dir, "session"))
 	testSetEnv(t, "AUTHENTICATION_BACKEND_LDAP_PASSWORD_FILE", dir)
@@ -49,7 +50,7 @@ func TestShouldErrorSecretNotExist(t *testing.T) {
 	// ignore the errors before this as they are checked by the validator.
 	assert.EqualError(t, errs[0], fmt.Sprintf("secrets: error loading secret path %s into key 'authentication_backend.ldap.password': %s", dir, fmt.Sprintf(errFmtDir, dir)))
 	assert.EqualError(t, errs[1], fmt.Sprintf("secrets: error loading secret path %s into key 'duo_api.secret_key': file does not exist error occurred: %s", filepath.Join(dir, "duo"), fmt.Sprintf(errFmt, filepath.Join(dir, "duo"))))
-	assert.EqualError(t, errs[2], fmt.Sprintf("secrets: error loading secret path %s into key 'jwt_secret': file does not exist error occurred: %s", filepath.Join(dir, "jwt"), fmt.Sprintf(errFmt, filepath.Join(dir, "jwt"))))
+	assert.EqualError(t, errs[2], fmt.Sprintf("secrets: error loading secret path %s into key 'identity_validation.reset_password.jwt_secret': file does not exist error occurred: %s", filepath.Join(dir, "jwt"), fmt.Sprintf(errFmt, filepath.Join(dir, "jwt"))))
 	assert.EqualError(t, errs[3], fmt.Sprintf("secrets: error loading secret path %s into key 'storage.mysql.password': file does not exist error occurred: %s", filepath.Join(dir, "mysql"), fmt.Sprintf(errFmt, filepath.Join(dir, "mysql"))))
 	assert.EqualError(t, errs[4], fmt.Sprintf("secrets: error loading secret path %s into key 'notifier.smtp.password': file does not exist error occurred: %s", filepath.Join(dir, "notifier"), fmt.Sprintf(errFmt, filepath.Join(dir, "notifier"))))
 	assert.EqualError(t, errs[5], fmt.Sprintf("secrets: error loading secret path %s into key 'identity_providers.oidc.hmac_secret': file does not exist error occurred: %s", filepath.Join(dir, "oidc-hmac"), fmt.Sprintf(errFmt, filepath.Join(dir, "oidc-hmac"))))
@@ -73,7 +74,7 @@ func TestLoadShouldReturnErrWithoutSources(t *testing.T) {
 func TestShouldHaveNotifier(t *testing.T) {
 	testSetEnv(t, "SESSION_SECRET", "abc")
 	testSetEnv(t, "STORAGE_MYSQL_PASSWORD", "abc")
-	testSetEnv(t, "JWT_SECRET", "abc")
+	testSetEnv(t, "IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET", "abc")
 	testSetEnv(t, "AUTHENTICATION_BACKEND_LDAP_PASSWORD", "abc")
 
 	val := schema.NewStructValidator()
@@ -83,6 +84,24 @@ func TestShouldHaveNotifier(t *testing.T) {
 	assert.Len(t, val.Errors(), 0)
 	assert.Len(t, val.Warnings(), 0)
 	assert.NotNil(t, config.Notifier)
+}
+
+func TestShouldConfigureRefreshIntervalDisable(t *testing.T) {
+	testSetEnv(t, "SESSION_SECRET", "abc")
+	testSetEnv(t, "STORAGE_MYSQL_PASSWORD", "abc")
+	testSetEnv(t, "IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET", "abc")
+	testSetEnv(t, "AUTHENTICATION_BACKEND_LDAP_PASSWORD", "abc")
+
+	val := schema.NewStructValidator()
+	_, config, err := Load(val, NewDefaultSources([]string{"./test_resources/config.yml"}, DefaultEnvPrefix, DefaultEnvDelimiter)...)
+
+	assert.NoError(t, err)
+	assert.Len(t, val.Errors(), 0)
+	assert.Len(t, val.Warnings(), 0)
+
+	require.NotNil(t, config.AuthenticationBackend.RefreshInterval)
+	assert.True(t, config.AuthenticationBackend.RefreshInterval.Never())
+	assert.False(t, config.AuthenticationBackend.RefreshInterval.Always())
 }
 
 func TestShouldParseLargeIntegerDurations(t *testing.T) {
@@ -95,12 +114,17 @@ func TestShouldParseLargeIntegerDurations(t *testing.T) {
 
 	assert.Equal(t, durationMax, config.Regulation.FindTime)
 	assert.Equal(t, time.Second*1000, config.Regulation.BanTime)
+
+	require.NotNil(t, config.AuthenticationBackend.RefreshInterval)
+	assert.Equal(t, false, config.AuthenticationBackend.RefreshInterval.Always())
+	assert.Equal(t, false, config.AuthenticationBackend.RefreshInterval.Never())
+	assert.Equal(t, time.Minute*5, config.AuthenticationBackend.RefreshInterval.Value())
 }
 
 func TestShouldValidateConfigurationWithEnv(t *testing.T) {
 	testSetEnv(t, "SESSION_SECRET", "abc")
 	testSetEnv(t, "STORAGE_MYSQL_PASSWORD", "abc")
-	testSetEnv(t, "JWT_SECRET", "abc")
+	testSetEnv(t, "IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET", "abc")
 	testSetEnv(t, "AUTHENTICATION_BACKEND_LDAP_PASSWORD", "abc")
 
 	val := schema.NewStructValidator()
@@ -114,12 +138,11 @@ func TestShouldValidateConfigurationWithEnv(t *testing.T) {
 func TestShouldValidateConfigurationWithFilters(t *testing.T) {
 	testSetEnv(t, "SESSION_SECRET", "abc")
 	testSetEnv(t, "STORAGE_MYSQL_PASSWORD", "abc")
-	testSetEnv(t, "JWT_SECRET", "abc")
+	testSetEnv(t, "IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET", "abc")
 	testSetEnv(t, "AUTHENTICATION_BACKEND_LDAP_PASSWORD", "abc")
 
 	t.Setenv("ABC_CLIENT_SECRET", "$plaintext$example-abc")
 	t.Setenv("XYZ_CLIENT_SECRET", "$plaintext$example-xyz")
-	t.Setenv("ANOTHER_CLIENT_SECRET", "$plaintext$example-123")
 	t.Setenv("SERVICES_SERVER", "10.10.10.10")
 	t.Setenv("ROOT_DOMAIN", "example.org")
 
@@ -134,17 +157,81 @@ func TestShouldValidateConfigurationWithFilters(t *testing.T) {
 	assert.Equal(t, "smtp://10.10.10.10:1025", config.Notifier.SMTP.Address.String())
 	assert.Equal(t, "10.10.10.10", config.Session.Redis.Host)
 
-	require.Len(t, config.IdentityProviders.OIDC.Clients, 3)
+	require.Len(t, config.IdentityProviders.OIDC.Clients, 4)
 	assert.Equal(t, "$plaintext$example-abc", config.IdentityProviders.OIDC.Clients[0].Secret.String())
 	assert.Equal(t, "$plaintext$example-xyz", config.IdentityProviders.OIDC.Clients[1].Secret.String())
-	assert.Equal(t, "$plaintext$example-123", config.IdentityProviders.OIDC.Clients[2].Secret.String())
+	assert.Equal(t, "$plaintext$example_secret value", config.IdentityProviders.OIDC.Clients[2].Secret.String())
+	assert.Equal(t, "$plaintext$abc", config.IdentityProviders.OIDC.Clients[3].Secret.String())
+
+	require.Len(t, config.IdentityProviders.OIDC.JSONWebKeys, 1)
+
+	key, ok := config.IdentityProviders.OIDC.JSONWebKeys[0].Key.(schema.CryptographicPrivateKey)
+	assert.True(t, ok)
+	require.NotNil(t, key)
+
+	rsakey, ok := key.(*rsa.PrivateKey)
+	assert.True(t, ok)
+	require.NotNil(t, rsakey)
+
+	assert.Equal(t, 65537, rsakey.E)
+	assert.Equal(t, "27171434142509968675194232284375073019792572110439705540328918657232692168643195881620537202636198369160560799743144111431567452741046220953662805104932829188046044673961143220261310008810498023470535975681337666107808278037041152412426963982841905494490761888868583347468199094007084012384588888035364766072411615843478518353414183640511444802956354678240763665865557092671631235272029876735331399857244041249715616453815382050245467939750635216436773618819757152567487060661311335480594478902550197306956880336905504741940598285468339785455485086967213774716099196949673312743795439236046960995348506152278833238987", rsakey.N.String())
+	assert.Equal(t, "5706925720915661669195242494994016816721008820974450261113990040996811079258641550734801632578349185215910392731806135371706455696484447433162465664729853270266472449716574399604756584391664331493231727196142834947800188400138417427667686333274620887920797982823077799989315356653608060034390741776504814150513570875362236882334931949786678793855564217596234691391113095918532726196507032878006343060796051755555405212832046478322407013172691936979796693050565243392092102513298609204623359016844719592078589959501078387650387089103850347191460557257744984924144972386173794776498508384237037750896668486369884278793", rsakey.D.String())
+}
+
+func TestShouldHandleNoAddressMySQLWithHostEnv(t *testing.T) {
+	testSetEnv(t, "STORAGE_MYSQL_HOST", "mysql")
+
+	val := schema.NewStructValidator()
+	_, config, err := Load(val, NewDefaultSources([]string{"./test_resources/config_no_address_mysql.yml"}, DefaultEnvPrefix, DefaultEnvDelimiter)...)
+
+	assert.NoError(t, err)
+
+	validator.ValidateConfiguration(config, val)
+
+	require.Len(t, val.Warnings(), 1)
+	require.Len(t, val.Errors(), 1)
+
+	assert.EqualError(t, val.Warnings()[0], "configuration keys 'storage.mysql.host' and 'storage.mysql.port' are deprecated in 4.38.0 and has been replaced by 'storage.mysql.address' in the format of '[tcp://]<hostname>[:<port>]': you are not required to make any changes as this has been automatically mapped for you to the value 'tcp://mysql:3306', but to stop this warning being logged you will need to adjust your configuration, and this configuration key and auto-mapping is likely to be removed in 5.0.0")
+	assert.Equal(t, "tcp://mysql:3306", config.Storage.MySQL.Address.String())
+}
+
+func TestShouldHandleNoAddressPostgreSQLWithHostEnv(t *testing.T) {
+	testSetEnv(t, "STORAGE_POSTGRES_HOST", "postgres")
+
+	val := schema.NewStructValidator()
+	_, config, err := Load(val, NewDefaultSources([]string{"./test_resources/config_no_address_postgres.yml"}, DefaultEnvPrefix, DefaultEnvDelimiter)...)
+
+	assert.NoError(t, err)
+
+	validator.ValidateConfiguration(config, val)
+
+	assert.Len(t, val.Warnings(), 1)
+	assert.Len(t, val.Errors(), 1)
+
+	assert.Equal(t, "tcp://postgres:5432", config.Storage.PostgreSQL.Address.String())
+}
+
+func TestShouldHandleNoAddressSMTPWithHostEnv(t *testing.T) {
+	testSetEnv(t, "NOTIFIER_SMTP_HOST", "smtp")
+
+	val := schema.NewStructValidator()
+	_, config, err := Load(val, NewDefaultSources([]string{"./test_resources/config_no_address_smtp.yml"}, DefaultEnvPrefix, DefaultEnvDelimiter)...)
+
+	assert.NoError(t, err)
+
+	validator.ValidateConfiguration(config, val)
+
+	assert.Len(t, val.Warnings(), 1)
+	assert.Len(t, val.Errors(), 1)
+
+	assert.Equal(t, "smtp://smtp:25", config.Notifier.SMTP.Address.String())
 }
 
 func TestShouldNotIgnoreInvalidEnvs(t *testing.T) {
 	testSetEnv(t, "SESSION_SECRET", "an env session secret")
 	testSetEnv(t, "STORAGE_MYSQL_PASSWORD", "an env storage mysql password")
 	testSetEnv(t, "STORAGE_MYSQL", "a bad env")
-	testSetEnv(t, "JWT_SECRET", "an env jwt secret")
+	testSetEnv(t, "IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET", "an env jwt secret")
 	testSetEnv(t, "AUTHENTICATION_BACKEND_LDAP_PASSWORD", "an env authentication backend ldap password")
 	testSetEnv(t, "AUTHENTICATION_BACKEND_LDAP_ADDRESS", "an env authentication backend ldap password")
 
@@ -153,7 +240,7 @@ func TestShouldNotIgnoreInvalidEnvs(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	validator.ValidateKeys(keys, DefaultEnvPrefix, val)
+	validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
 
 	require.Len(t, val.Warnings(), 1)
 	assert.Len(t, val.Errors(), 1)
@@ -174,6 +261,7 @@ func TestShouldValidateServerAddressValues(t *testing.T) {
 		expectedNetAddrHTTP    string
 		expectedMetrics        string
 		expectedNetAddrMetrics string
+		werrs                  []string
 		errs                   []string
 	}{
 		{
@@ -187,6 +275,7 @@ func TestShouldValidateServerAddressValues(t *testing.T) {
 			":9091",
 			"tcp://:9959/metrics",
 			":9959",
+			nil,
 			nil,
 		},
 		{
@@ -207,6 +296,9 @@ func TestShouldValidateServerAddressValues(t *testing.T) {
 			"127.0.0.1:8080",
 			"tcp://:9959/metrics",
 			":9959",
+			[]string{
+				"configuration keys 'server.host', 'server.port', and 'server.path' are deprecated in 4.38.0 and has been replaced by 'server.address' in the format of '[tcp[(4|6)]://]<hostname>[:<port>][/<path>]' or 'tcp[(4|6)://][hostname]:<port>[/<path>]': you are not required to make any changes as this has been automatically mapped for you to the value 'tcp://127.0.0.1:8080/', but to stop this warning being logged you will need to adjust your configuration, and this configuration key and auto-mapping is likely to be removed in 5.0.0",
+			},
 			nil,
 		},
 		{
@@ -228,6 +320,7 @@ func TestShouldValidateServerAddressValues(t *testing.T) {
 			"tcp://127.0.0.3:8080/metrics",
 			"127.0.0.3:8080",
 			nil,
+			nil,
 		},
 		{
 			"ShouldErrorOnDeprecatedEnvAndModernConfigFileListenerOptions",
@@ -240,8 +333,9 @@ func TestShouldValidateServerAddressValues(t *testing.T) {
 			":1000",
 			"tcp://:9959/metrics",
 			":9959",
+			nil,
 			[]string{
-				"server: option 'host' and 'port' can't be configured at the same time as 'address'",
+				"error occurred performing deprecation mapping for keys 'server.host', 'server.port', and 'server.path' to new key server.address: the new key already exists with value 'tcp://:1000' but the deprecated keys and the new key can't both be configured",
 			},
 		},
 		{
@@ -255,8 +349,9 @@ func TestShouldValidateServerAddressValues(t *testing.T) {
 			":10000",
 			"tcp://:9959/metrics",
 			":9959",
+			nil,
 			[]string{
-				"server: option 'host' and 'port' can't be configured at the same time as 'address'",
+				"error occurred performing deprecation mapping for keys 'server.host', 'server.port', and 'server.path' to new key server.address: the new key already exists with value 'tcp://:10000' but the deprecated keys and the new key can't both be configured",
 			},
 		},
 	}
@@ -292,21 +387,25 @@ func TestShouldValidateServerAddressValues(t *testing.T) {
 
 			assert.NoError(t, err)
 
-			validator.ValidateKeys(keys, DefaultEnvPrefix, val)
-
-			assert.Len(t, val.Errors(), 0)
+			validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
 
 			assert.NotEmpty(t, config)
-
-			val.Clear()
 
 			validator.ValidateServer(config, val)
 			validator.ValidateTelemetry(config, val)
 
-			assert.Len(t, val.Warnings(), 0)
+			werrs := val.Warnings()
+			if n := len(tc.werrs); n == 0 {
+				assert.Len(t, werrs, 0)
+			} else {
+				require.Len(t, werrs, n)
+
+				for i := 0; i < n; i++ {
+					assert.EqualError(t, werrs[i], tc.werrs[i])
+				}
+			}
 
 			errs := val.Errors()
-
 			if n := len(tc.errs); n == 0 {
 				assert.Len(t, errs, 0)
 			} else {
@@ -332,7 +431,7 @@ func TestShouldValidateAndRaiseErrorsOnNormalConfigurationAndSecret(t *testing.T
 	testSetEnv(t, "SESSION_SECRET", "an env session secret")
 	testSetEnv(t, "SESSION_SECRET_FILE", "./test_resources/example_secret")
 	testSetEnv(t, "STORAGE_MYSQL_PASSWORD", "an env storage mysql password")
-	testSetEnv(t, "JWT_SECRET_FILE", "./test_resources/example_secret")
+	testSetEnv(t, "IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE", "./test_resources/example_secret")
 	testSetEnv(t, "AUTHENTICATION_BACKEND_LDAP_PASSWORD", "an env authentication backend ldap password")
 	testSetEnv(t, "STORAGE_ENCRYPTION_KEY", "a_very_bad_encryption_key")
 
@@ -345,7 +444,7 @@ func TestShouldValidateAndRaiseErrorsOnNormalConfigurationAndSecret(t *testing.T
 
 	assert.EqualError(t, val.Errors()[0], "secrets: error loading secret into key 'session.secret': it's already defined in other configuration sources")
 
-	assert.Equal(t, "example_secret value", config.JWTSecret)
+	assert.Equal(t, "example_secret value", config.IdentityValidation.ResetPassword.JWTSecret)
 	assert.Equal(t, "example_secret value", config.Session.Secret)
 	assert.Equal(t, "an env storage mysql password", config.Storage.MySQL.Password)
 	assert.Equal(t, "an env authentication backend ldap password", config.AuthenticationBackend.LDAP.Password)
@@ -375,7 +474,7 @@ func TestShouldRaiseIOErrOnUnreadableFile(t *testing.T) {
 func TestShouldValidateConfigurationWithEnvSecrets(t *testing.T) {
 	testSetEnv(t, "SESSION_SECRET_FILE", "./test_resources/example_secret")
 	testSetEnv(t, "STORAGE_MYSQL_PASSWORD_FILE", "./test_resources/example_secret")
-	testSetEnv(t, "JWT_SECRET_FILE", "./test_resources/example_secret")
+	testSetEnv(t, "IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET_FILE", "./test_resources/example_secret")
 	testSetEnv(t, "AUTHENTICATION_BACKEND_LDAP_PASSWORD_FILE", "./test_resources/example_secret")
 	testSetEnv(t, "STORAGE_ENCRYPTION_KEY_FILE", "./test_resources/example_secret")
 
@@ -386,11 +485,24 @@ func TestShouldValidateConfigurationWithEnvSecrets(t *testing.T) {
 	assert.Len(t, val.Errors(), 0)
 	assert.Len(t, val.Warnings(), 0)
 
-	assert.Equal(t, "example_secret value", config.JWTSecret)
+	assert.Equal(t, "example_secret value", config.IdentityValidation.ResetPassword.JWTSecret)
 	assert.Equal(t, "example_secret value", config.Session.Secret)
 	assert.Equal(t, "example_secret value", config.AuthenticationBackend.LDAP.Password)
 	assert.Equal(t, "example_secret value", config.Storage.MySQL.Password)
 	assert.Equal(t, "example_secret value", config.Storage.EncryptionKey)
+}
+
+func TestShouldNotErrorOnLogLevel(t *testing.T) {
+	testSetEnv(t, "LOG_LEVEL", "warn")
+
+	val := schema.NewStructValidator()
+	_, config, err := Load(val, NewDefaultSources([]string{"./test_resources/config_nolog.yml"}, DefaultEnvPrefix, DefaultEnvDelimiter)...)
+
+	assert.NoError(t, err)
+	assert.Len(t, val.Errors(), 0)
+	assert.Len(t, val.Warnings(), 0)
+
+	assert.Equal(t, "warn", config.Log.Level)
 }
 
 func TestShouldLoadURLList(t *testing.T) {
@@ -399,7 +511,7 @@ func TestShouldLoadURLList(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	validator.ValidateKeys(keys, DefaultEnvPrefix, val)
+	validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
 
 	assert.Len(t, val.Errors(), 0)
 	assert.Len(t, val.Warnings(), 0)
@@ -415,7 +527,7 @@ func TestShouldDisableOIDCEntropy(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	validator.ValidateKeys(keys, DefaultEnvPrefix, val)
+	validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
 
 	assert.Len(t, val.Errors(), 0)
 	assert.Len(t, val.Warnings(), 0)
@@ -437,7 +549,7 @@ func TestShouldConfigureConsent(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	validator.ValidateKeys(keys, DefaultEnvPrefix, val)
+	validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
 
 	assert.Len(t, val.Errors(), 0)
 	assert.Len(t, val.Warnings(), 0)
@@ -450,7 +562,7 @@ func TestShouldConfigureConsent(t *testing.T) {
 func TestShouldValidateAndRaiseErrorsOnBadConfiguration(t *testing.T) {
 	testSetEnv(t, "SESSION_SECRET", "abc")
 	testSetEnv(t, "STORAGE_MYSQL_PASSWORD", "abc")
-	testSetEnv(t, "JWT_SECRET", "abc")
+	testSetEnv(t, "IDENTITY_VALIDATION_RESET_PASSWORD_JWT_SECRET", "abc")
 	testSetEnv(t, "AUTHENTICATION_BACKEND_LDAP_PASSWORD", "abc")
 
 	val := schema.NewStructValidator()
@@ -458,13 +570,13 @@ func TestShouldValidateAndRaiseErrorsOnBadConfiguration(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	validator.ValidateKeys(keys, DefaultEnvPrefix, val)
+	validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
 
 	require.Len(t, val.Errors(), 1)
 	require.Len(t, val.Warnings(), 1)
 
 	assert.EqualError(t, val.Errors()[0], "configuration key not expected: loggy_file")
-	assert.EqualError(t, val.Warnings()[0], "configuration key 'logs_level' is deprecated in 4.7.0 and has been replaced by 'log.level': this has been automatically mapped for you but you will need to adjust your configuration to remove this message")
+	assert.EqualError(t, val.Warnings()[0], "configuration key 'logs_level' is deprecated in 4.7.0 and has been replaced by 'log.level': you are not required to make any changes as this has been automatically mapped for you, but to stop this warning being logged you will need to adjust your configuration, and this configuration key and auto-mapping is likely to be removed in 5.0.0")
 
 	assert.Equal(t, "debug", c.Log.Level)
 }
@@ -477,7 +589,7 @@ func TestShouldValidateDeprecatedEnvNames(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	validator.ValidateKeys(keys, DefaultEnvPrefix, val)
+	validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
 
 	assert.Len(t, val.Errors(), 0)
 	require.Len(t, val.Warnings(), 1)
@@ -489,33 +601,35 @@ func TestShouldValidateDeprecatedEnvNames(t *testing.T) {
 
 func TestShouldValidateDeprecatedEnvNamesWithDeprecatedKeys(t *testing.T) {
 	testSetEnv(t, "AUTHENTICATION_BACKEND_LDAP_URL", "ldap://from-env")
+	testSetEnv(t, "JWT_SECRET_FILE", "./test_resources/example_secret")
 
 	val := schema.NewStructValidator()
 	keys, c, err := Load(val, NewDefaultSources([]string{"./test_resources/config.deprecated.yml"}, DefaultEnvPrefix, DefaultEnvDelimiter)...)
 
 	assert.NoError(t, err)
 
-	validator.ValidateKeys(keys, DefaultEnvPrefix, val)
+	validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
 
 	assert.Len(t, val.Errors(), 0)
 
 	warnings := val.Warnings()
-	require.Len(t, warnings, 10)
+	require.Len(t, warnings, 6)
 
 	sort.Sort(utils.ErrSliceSortAlphabetical(warnings))
 
-	assert.EqualError(t, warnings[0], "configuration key 'authentication_backend.ldap.url' is deprecated in 4.38.0 and has been replaced by 'authentication_backend.ldap.address': this has been automatically mapped for you but you will need to adjust your configuration to remove this message")
-	assert.EqualError(t, warnings[1], "configuration key 'notifier.smtp.host' is deprecated in 4.38.0 and has been replaced by 'notifier.smtp.address' when combined with the 'notifier.smtp.port' in the format of '[tcp://]<hostname>[:<port>]': this should be automatically mapped for you but you will need to adjust your configuration to remove this message")
-	assert.EqualError(t, warnings[2], "configuration key 'notifier.smtp.port' is deprecated in 4.38.0 and has been replaced by 'notifier.smtp.address' when combined with the 'notifier.smtp.host' in the format of '[tcp://]<hostname>[:<port>]': this should be automatically mapped for you but you will need to adjust your configuration to remove this message")
-	assert.EqualError(t, warnings[3], "configuration key 'server.host' is deprecated in 4.38.0 and has been replaced by 'server.address' when combined with the 'server.port' and 'server.path' in the format of '[tcp[(4|6)]://]<hostname>[:<port>][/<path>]' or 'tcp[(4|6)://][hostname]:<port>[/<path>]': this should be automatically mapped for you but you will need to adjust your configuration to remove this message")
-	assert.EqualError(t, warnings[4], "configuration key 'server.path' is deprecated in 4.38.0 and has been replaced by 'server.address' when combined with the 'server.host' and 'server.port' in the format of '[tcp[(4|6)]://]<hostname>[:<port>][/<path>]' or 'tcp[(4|6)://][hostname]:<port>[/<path>]': this should be automatically mapped for you but you will need to adjust your configuration to remove this message")
-	assert.EqualError(t, warnings[5], "configuration key 'server.port' is deprecated in 4.38.0 and has been replaced by 'server.address' when combined with the 'server.host' and 'server.path' in the format of '[tcp[(4|6)]://]<hostname>[:<port>][/<path>]' or 'tcp[(4|6)://][hostname]:<port>[/<path>]': this should be automatically mapped for you but you will need to adjust your configuration to remove this message")
-	assert.EqualError(t, warnings[6], "configuration key 'storage.mysql.host' is deprecated in 4.38.0 and has been replaced by 'storage.mysql.address' when combined with the 'storage.mysql.port' in the format of '[tcp://]<hostname>[:<port>]': this should be automatically mapped for you but you will need to adjust your configuration to remove this message")
-	assert.EqualError(t, warnings[7], "configuration key 'storage.mysql.port' is deprecated in 4.38.0 and has been replaced by 'storage.mysql.address' when combined with the 'storage.mysql.host' in the format of '[tcp://]<hostname>[:<port>]': this should be automatically mapped for you but you will need to adjust your configuration to remove this message")
-	assert.EqualError(t, warnings[8], "configuration key 'storage.postgres.host' is deprecated in 4.38.0 and has been replaced by 'storage.postgres.address' when combined with the 'storage.postgres.port' in the format of '[tcp://]<hostname>[:<port>]': this should be automatically mapped for you but you will need to adjust your configuration to remove this message")
-	assert.EqualError(t, warnings[9], "configuration key 'storage.postgres.port' is deprecated in 4.38.0 and has been replaced by 'storage.postgres.address' when combined with the 'storage.postgres.host' in the format of '[tcp://]<hostname>[:<port>]': this should be automatically mapped for you but you will need to adjust your configuration to remove this message")
+	assert.EqualError(t, warnings[0], "configuration key 'authentication_backend.ldap.url' is deprecated in 4.38.0 and has been replaced by 'authentication_backend.ldap.address': you are not required to make any changes as this has been automatically mapped for you, but to stop this warning being logged you will need to adjust your configuration, and this configuration key and auto-mapping is likely to be removed in 5.0.0")
+	assert.EqualError(t, warnings[1], "configuration key 'jwt_secret' is deprecated in 4.38.0 and has been replaced by 'identity_validation.reset_password.jwt_secret': you are not required to make any changes as this has been automatically mapped for you, but to stop this warning being logged you will need to adjust your configuration, and this configuration key and auto-mapping is likely to be removed in 5.0.0")
+	assert.EqualError(t, warnings[2], "configuration keys 'notifier.smtp.host' and 'notifier.smtp.port' are deprecated in 4.38.0 and has been replaced by 'notifier.smtp.address' in the format of '[tcp://]<hostname>[:<port>]': you are not required to make any changes as this has been automatically mapped for you to the value 'smtp://127.0.0.47:2025', but to stop this warning being logged you will need to adjust your configuration, and this configuration key and auto-mapping is likely to be removed in 5.0.0")
+	assert.EqualError(t, warnings[3], "configuration keys 'server.host', 'server.port', and 'server.path' are deprecated in 4.38.0 and has been replaced by 'server.address' in the format of '[tcp[(4|6)]://]<hostname>[:<port>][/<path>]' or 'tcp[(4|6)://][hostname]:<port>[/<path>]': you are not required to make any changes as this has been automatically mapped for you to the value 'tcp://127.0.0.44:90/abc', but to stop this warning being logged you will need to adjust your configuration, and this configuration key and auto-mapping is likely to be removed in 5.0.0")
+	assert.EqualError(t, warnings[4], "configuration keys 'storage.mysql.host' and 'storage.mysql.port' are deprecated in 4.38.0 and has been replaced by 'storage.mysql.address' in the format of '[tcp://]<hostname>[:<port>]': you are not required to make any changes as this has been automatically mapped for you to the value 'tcp://127.0.0.45:13306', but to stop this warning being logged you will need to adjust your configuration, and this configuration key and auto-mapping is likely to be removed in 5.0.0")
+	assert.EqualError(t, warnings[5], "configuration keys 'storage.postgres.host' and 'storage.postgres.port' are deprecated in 4.38.0 and has been replaced by 'storage.postgres.address' in the format of '[tcp://]<hostname>[:<port>]': you are not required to make any changes as this has been automatically mapped for you to the value 'tcp://127.0.0.46:15432', but to stop this warning being logged you will need to adjust your configuration, and this configuration key and auto-mapping is likely to be removed in 5.0.0")
 
+	assert.Equal(t, "tcp://127.0.0.44:90/abc", c.Server.Address.String())
+	assert.Equal(t, "tcp://127.0.0.45:13306", c.Storage.MySQL.Address.String())
+	assert.Equal(t, "tcp://127.0.0.46:15432", c.Storage.PostgreSQL.Address.String())
+	assert.Equal(t, "smtp://127.0.0.47:2025", c.Notifier.SMTP.Address.String())
 	assert.Equal(t, "ldap://from-env:389", c.AuthenticationBackend.LDAP.Address.String())
+	assert.Equal(t, "example_secret value", c.IdentityValidation.ResetPassword.JWTSecret)
 }
 
 func TestShouldRaiseErrOnInvalidNotifierSMTPSender(t *testing.T) {
@@ -524,7 +638,7 @@ func TestShouldRaiseErrOnInvalidNotifierSMTPSender(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	validator.ValidateKeys(keys, DefaultEnvPrefix, val)
+	validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
 
 	require.Len(t, val.Errors(), 1)
 	assert.Len(t, val.Warnings(), 0)
@@ -538,7 +652,7 @@ func TestShouldHandleErrInvalidatorWhenSMTPSenderBlank(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	validator.ValidateKeys(keys, DefaultEnvPrefix, val)
+	validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
 
 	assert.Len(t, val.Errors(), 0)
 	assert.Len(t, val.Warnings(), 0)
@@ -560,7 +674,7 @@ func TestShouldDecodeSMTPSenderWithoutName(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	validator.ValidateKeys(keys, DefaultEnvPrefix, val)
+	validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
 
 	assert.Len(t, val.Errors(), 0)
 	assert.Len(t, val.Warnings(), 0)
@@ -579,7 +693,7 @@ func TestShouldDecodeServerTLS(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	validator.ValidateKeys(keys, DefaultEnvPrefix, val)
+	validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
 
 	assert.Len(t, val.Errors(), 0)
 	assert.Len(t, val.Warnings(), 0)
@@ -595,7 +709,7 @@ func TestShouldDecodeSMTPSenderWithName(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	validator.ValidateKeys(keys, DefaultEnvPrefix, val)
+	validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
 
 	assert.Len(t, val.Errors(), 0)
 	assert.Len(t, val.Warnings(), 0)
@@ -605,13 +719,48 @@ func TestShouldDecodeSMTPSenderWithName(t *testing.T) {
 	assert.Equal(t, schema.RememberMeDisabled, config.Session.RememberMe)
 }
 
+func TestShouldConfigureRefreshIntervalAlways(t *testing.T) {
+	val := schema.NewStructValidator()
+	keys, config, err := Load(val, NewDefaultSources([]string{"./test_resources/config_alt.yml"}, DefaultEnvPrefix, DefaultEnvDelimiter)...)
+
+	assert.NoError(t, err)
+
+	validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
+
+	assert.Len(t, val.Errors(), 0)
+	assert.Len(t, val.Warnings(), 0)
+
+	require.NotNil(t, config.AuthenticationBackend.RefreshInterval)
+	assert.False(t, config.AuthenticationBackend.RefreshInterval.Never())
+	assert.True(t, config.AuthenticationBackend.RefreshInterval.Always())
+}
+
+func TestShouldConfigureRefreshIntervalDefault(t *testing.T) {
+	val := schema.NewStructValidator()
+	keys, config, err := Load(val, NewDefaultSources([]string{"./test_resources/config.no-refresh.yml"}, DefaultEnvPrefix, DefaultEnvDelimiter)...)
+
+	assert.NoError(t, err)
+
+	validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
+
+	assert.Len(t, val.Errors(), 0)
+	assert.Len(t, val.Warnings(), 0)
+
+	validator.ValidateAuthenticationBackend(&config.AuthenticationBackend, val)
+
+	require.NotNil(t, config.AuthenticationBackend.RefreshInterval)
+	assert.False(t, config.AuthenticationBackend.RefreshInterval.Always())
+	assert.False(t, config.AuthenticationBackend.RefreshInterval.Never())
+	assert.Equal(t, time.Minute*5, config.AuthenticationBackend.RefreshInterval.Value())
+}
+
 func TestShouldParseRegex(t *testing.T) {
 	val := schema.NewStructValidator()
 	keys, config, err := Load(val, NewDefaultSources([]string{"./test_resources/config_domain_regex.yml"}, DefaultEnvPrefix, DefaultEnvDelimiter)...)
 
 	assert.NoError(t, err)
 
-	validator.ValidateKeys(keys, DefaultEnvPrefix, val)
+	validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
 
 	assert.Len(t, val.Errors(), 0)
 	assert.Len(t, val.Warnings(), 0)
@@ -641,7 +790,7 @@ func TestShouldErrOnParseInvalidRegex(t *testing.T) {
 
 	assert.NoError(t, err)
 
-	validator.ValidateKeys(keys, DefaultEnvPrefix, val)
+	validator.ValidateKeys(keys, GetMultiKeyMappedDeprecationKeys(), DefaultEnvPrefix, val)
 
 	require.Len(t, val.Errors(), 1)
 	assert.Len(t, val.Warnings(), 0)
@@ -681,7 +830,7 @@ func TestShouldLoadDirectoryConfiguration(t *testing.T) {
 	assert.Len(t, val.Errors(), 0)
 	require.Len(t, val.Warnings(), 1)
 
-	assert.EqualError(t, val.Warnings()[0], "configuration key 'server.port' is deprecated in 4.38.0 and has been replaced by 'server.address' when combined with the 'server.host' and 'server.path' in the format of '[tcp[(4|6)]://]<hostname>[:<port>][/<path>]' or 'tcp[(4|6)://][hostname]:<port>[/<path>]': this should be automatically mapped for you but you will need to adjust your configuration to remove this message")
+	assert.EqualError(t, val.Warnings()[0], "configuration keys 'server.host', 'server.port', and 'server.path' are deprecated in 4.38.0 and has been replaced by 'server.address' in the format of '[tcp[(4|6)]://]<hostname>[:<port>][/<path>]' or 'tcp[(4|6)://][hostname]:<port>[/<path>]': you are not required to make any changes as this has been automatically mapped for you to the value 'tcp://:9091/', but to stop this warning being logged you will need to adjust your configuration, and this configuration key and auto-mapping is likely to be removed in 5.0.0")
 }
 
 func testSetEnv(t *testing.T, key, value string) {

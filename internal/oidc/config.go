@@ -9,14 +9,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hashicorp/go-retryablehttp"
-	"github.com/ory/fosite"
-	"github.com/ory/fosite/handler/oauth2"
-	"github.com/ory/fosite/handler/openid"
-	"github.com/ory/fosite/handler/par"
-	"github.com/ory/fosite/i18n"
-	"github.com/ory/fosite/token/hmac"
-	"github.com/ory/fosite/token/jwt"
+	oauthelia2 "authelia.com/provider/oauth2"
+	"authelia.com/provider/oauth2/handler/oauth2"
+	"authelia.com/provider/oauth2/handler/openid"
+	"authelia.com/provider/oauth2/handler/par"
+	"authelia.com/provider/oauth2/handler/pkce"
+	"authelia.com/provider/oauth2/i18n"
+	"authelia.com/provider/oauth2/token/jwt"
+	retryablehttp "github.com/hashicorp/go-retryablehttp"
 
 	"github.com/authelia/authelia/v4/internal/configuration/schema"
 	"github.com/authelia/authelia/v4/internal/templates"
@@ -29,41 +29,34 @@ func NewConfig(config *schema.IdentityProvidersOpenIDConnect, signer jwt.Signer,
 		GlobalSecret:               []byte(utils.HashSHA256FromString(config.HMACSecret)),
 		SendDebugMessagesToClients: config.EnableClientDebugMessages,
 		MinParameterEntropy:        config.MinimumParameterEntropy,
-		Lifespans:                  config.Lifespans.IdentityProvidersOpenIDConnectLifespanToken,
+		Lifespans: LifespansConfig{
+			IdentityProvidersOpenIDConnectLifespanToken: config.Lifespans.IdentityProvidersOpenIDConnectLifespanToken,
+		},
 		ProofKeyCodeExchange: ProofKeyCodeExchangeConfig{
 			Enforce:                   config.EnforcePKCE == "always",
 			EnforcePublicClients:      config.EnforcePKCE != "never",
 			AllowPlainChallengeMethod: config.EnablePKCEPlainChallenge,
 		},
 		PAR: PARConfig{
-			Enforced:        config.PAR.Enforce,
-			ContextLifespan: config.PAR.ContextLifespan,
+			Require:         config.RequirePushedAuthorizationRequests,
+			ContextLifespan: 5 * time.Minute,
 			URIPrefix:       RedirectURIPrefixPushedAuthorizationRequestURN,
 		},
 		JWTAccessToken: JWTAccessTokenConfig{
 			Enable:                       config.Discovery.JWTResponseAccessTokens,
 			EnableStatelessIntrospection: config.EnableJWTAccessTokenStatelessIntrospection,
 		},
-		JWTSecuredAuthorizationLifespan: config.Lifespans.JWTSecuredAuthorization,
-		Templates:                       templates,
+		JWTSecuredAuthorizationLifespan:                    config.Lifespans.JWTSecuredAuthorization,
+		RevokeRefreshTokensExplicit:                        true,
+		EnforceRevokeFlowRevokeRefreshTokensExplicitClient: true,
+		ClientCredentialsFlowImplicitGrantRequested:        true,
+		Templates: templates,
 	}
 
-	c.Handlers.ResponseMode = &ResponseModeHandler{c}
-
 	if config.Discovery.JWTResponseAccessTokens {
-		c.Strategy.Core = &JWTCoreStrategy{
-			Signer: signer,
-			HMACCoreStrategy: &HMACCoreStrategy{
-				Enigma: &hmac.HMACStrategy{Config: c},
-				Config: c,
-			},
-			Config: c,
-		}
+		c.Strategy.Core = oauth2.NewCoreStrategy(c, "authelia_%s_", signer)
 	} else {
-		c.Strategy.Core = &HMACCoreStrategy{
-			Enigma: &hmac.HMACStrategy{Config: c},
-			Config: c,
-		}
+		c.Strategy.Core = oauth2.NewCoreStrategy(c, "authelia_%s_", nil)
 	}
 
 	c.Strategy.OpenID = &openid.DefaultStrategy{
@@ -74,7 +67,7 @@ func NewConfig(config *schema.IdentityProvidersOpenIDConnect, signer jwt.Signer,
 	return c
 }
 
-// Config is an implementation of the fosite.Configurator.
+// Config is an implementation of the oauthelia2.Configurator.
 type Config struct {
 	Signer jwt.Signer
 
@@ -97,16 +90,25 @@ type Config struct {
 
 	JWTAccessToken JWTAccessTokenConfig
 
-	Hasher               *Hasher
-	Hash                 HashConfig
-	Strategy             StrategyConfig
-	PAR                  PARConfig
-	Handlers             HandlersConfig
-	Lifespans            schema.IdentityProvidersOpenIDConnectLifespanToken
+	Hash      HashConfig
+	Strategy  StrategyConfig
+	PAR       PARConfig
+	Handlers  HandlersConfig
+	Lifespans LifespansConfig
+	RFC8693   RFC8693Config
+
 	ProofKeyCodeExchange ProofKeyCodeExchangeConfig
 	GrantTypeJWTBearer   GrantTypeJWTBearerConfig
 
-	TokenURL            string
+	TokenURL string
+
+	RFC8628UserVerificationURL string
+
+	RevokeRefreshTokensExplicit                        bool
+	EnforceRevokeFlowRevokeRefreshTokensExplicitClient bool
+	EnforceJWTProfileAccessTokens                      bool
+	ClientCredentialsFlowImplicitGrantRequested        bool
+
 	TokenEntropy        int
 	MinParameterEntropy int
 
@@ -120,20 +122,34 @@ type Config struct {
 	Templates *templates.Provider
 }
 
-// HashConfig holds specific fosite.Configurator information for hashing.
+type RFC8693Config struct {
+	TokenTypes                map[string]oauthelia2.RFC8693TokenType
+	DefaultRequestedTokenType string
+}
+
+type LifespansConfig struct {
+	schema.IdentityProvidersOpenIDConnectLifespanToken
+
+	VerifiableCredentialsNonce time.Duration
+
+	RFC8628Code    time.Duration
+	RFC8628Polling time.Duration
+}
+
+// HashConfig holds specific oauthelia2.Configurator information for hashing.
 type HashConfig struct {
-	ClientSecrets fosite.Hasher
+	ClientSecrets oauthelia2.Hasher
 	HMAC          func() (h hash.Hash)
 }
 
-// StrategyConfig holds specific fosite.Configurator information for various strategies.
+// StrategyConfig holds specific oauthelia2.Configurator information for various strategies.
 type StrategyConfig struct {
 	Core                 oauth2.CoreStrategy
 	OpenID               openid.OpenIDConnectTokenStrategy
-	Audience             fosite.AudienceMatchingStrategy
-	Scope                fosite.ScopeStrategy
-	JWKSFetcher          fosite.JWKSFetcherStrategy
-	ClientAuthentication fosite.ClientAuthenticationStrategy
+	Audience             oauthelia2.AudienceMatchingStrategy
+	Scope                oauthelia2.ScopeStrategy
+	JWKSFetcher          oauthelia2.JWKSFetcherStrategy
+	ClientAuthentication oauthelia2.ClientAuthenticationStrategy
 }
 
 // JWTAccessTokenConfig represents the JWT Access Token config.
@@ -142,14 +158,14 @@ type JWTAccessTokenConfig struct {
 	EnableStatelessIntrospection bool
 }
 
-// PARConfig holds specific fosite.Configurator information for Pushed Authorization Requests.
+// PARConfig holds specific oauthelia2.Configurator information for Pushed Authorization Requests.
 type PARConfig struct {
-	Enforced        bool
+	Require         bool
 	URIPrefix       string
 	ContextLifespan time.Duration
 }
 
-// IssuersConfig holds specific fosite.Configurator information for the issuer.
+// IssuersConfig holds specific oauthelia2.Configurator information for the issuer.
 type IssuersConfig struct {
 	IDToken     string
 	AccessToken string
@@ -158,35 +174,43 @@ type IssuersConfig struct {
 	JWTSecuredResponseMode                  string
 }
 
-// HandlersConfig holds specific fosite.Configurator handlers configuration information.
+// HandlersConfig holds specific oauthelia2.Configurator handlers configuration information.
 type HandlersConfig struct {
 	// ResponseMode provides an extension handler for custom response modes.
-	ResponseMode fosite.ResponseModeHandler
+	ResponseMode oauthelia2.ResponseModeHandlers
+
+	// ResponseModeParameter provides an extension handler for custom response mode parameters added later after the
+	// response mode is assured.
+	ResponseModeParameter oauthelia2.ResponseModeParameterHandlers
 
 	// AuthorizeEndpoint is a list of handlers that are called before the authorization endpoint is served.
-	AuthorizeEndpoint fosite.AuthorizeEndpointHandlers
+	AuthorizeEndpoint oauthelia2.AuthorizeEndpointHandlers
 
 	// TokenEndpoint is a list of handlers that are called before the token endpoint is served.
-	TokenEndpoint fosite.TokenEndpointHandlers
+	TokenEndpoint oauthelia2.TokenEndpointHandlers
 
 	// TokenIntrospection is a list of handlers that are called before the token introspection endpoint is served.
-	TokenIntrospection fosite.TokenIntrospectionHandlers
+	TokenIntrospection oauthelia2.TokenIntrospectionHandlers
 
 	// Revocation is a list of handlers that are called before the revocation endpoint is served.
-	Revocation fosite.RevocationHandlers
+	Revocation oauthelia2.RevocationHandlers
 
 	// PushedAuthorizeEndpoint is a list of handlers that are called before the PAR endpoint is served.
-	PushedAuthorizeEndpoint fosite.PushedAuthorizeEndpointHandlers
+	PushedAuthorizeEndpoint oauthelia2.PushedAuthorizeEndpointHandlers
+
+	RFC8628DeviceAuthorizeEndpoint oauthelia2.RFC8628DeviceAuthorizeEndpointHandlers
+
+	RFC8628UserAuthorizeEndpoint oauthelia2.RFC8628UserAuthorizeEndpointHandlers
 }
 
-// GrantTypeJWTBearerConfig holds specific fosite.Configurator information for the JWT Bearer Grant Type.
+// GrantTypeJWTBearerConfig holds specific oauthelia2.Configurator information for the JWT Bearer Grant Type.
 type GrantTypeJWTBearerConfig struct {
 	OptionalClientAuth bool
 	OptionalJTIClaim   bool
 	OptionalIssuedDate bool
 }
 
-// ProofKeyCodeExchangeConfig holds specific fosite.Configurator information for PKCE.
+// ProofKeyCodeExchangeConfig holds specific oauthelia2.Configurator information for PKCE.
 type ProofKeyCodeExchangeConfig struct {
 	Enforce                   bool
 	EnforcePublicClients      bool
@@ -200,7 +224,7 @@ func (c *Config) LoadHandlers(store *Store) {
 	var statelessJWT any
 
 	if c.JWTAccessToken.Enable && c.JWTAccessToken.EnableStatelessIntrospection {
-		statelessJWT = &StatelessJWTValidator{
+		statelessJWT = &oauth2.StatelessJWTValidator{
 			Signer: c.Signer,
 			Config: c,
 		}
@@ -220,7 +244,7 @@ func (c *Config) LoadHandlers(store *Store) {
 			AccessTokenStorage:  store,
 			Config:              c,
 		},
-		&ClientCredentialsGrantHandler{
+		&oauth2.ClientCredentialsGrantHandler{
 			HandleHelper: &oauth2.HandleHelper{
 				AccessTokenStrategy: c.Strategy.Core,
 				AccessTokenStorage:  store,
@@ -228,7 +252,7 @@ func (c *Config) LoadHandlers(store *Store) {
 			},
 			Config: c,
 		},
-		&RefreshTokenGrantHandler{
+		&oauth2.RefreshTokenGrantHandler{
 			AccessTokenStrategy:    c.Strategy.Core,
 			RefreshTokenStrategy:   c.Strategy.Core,
 			TokenRevocationStorage: store,
@@ -290,8 +314,9 @@ func (c *Config) LoadHandlers(store *Store) {
 			AccessTokenStrategy:    c.Strategy.Core,
 			RefreshTokenStrategy:   c.Strategy.Core,
 			TokenRevocationStorage: store,
+			Config:                 c,
 		},
-		&PKCEHandler{
+		&pkce.Handler{
 			AuthorizeCodeStrategy: c.Strategy.Core,
 			Storage:               store,
 			Config:                c,
@@ -300,13 +325,18 @@ func (c *Config) LoadHandlers(store *Store) {
 			Storage: store,
 			Config:  c,
 		},
-		&AuthorizationServerIssuerIdentificationHandler{
+
+		// Response Mode Handling.
+		&oauthelia2.DefaultResponseModeHandler{
+			Config: c,
+		},
+		&oauthelia2.RFC9207ResponseModeParameterHandler{
 			Config: c,
 		},
 	}
 
 	x := HandlersConfig{
-		ResponseMode: c.Handlers.ResponseMode,
+		ResponseMode: []oauthelia2.ResponseModeHandler{&oauthelia2.DefaultResponseModeHandler{Config: c}},
 	}
 
 	for _, handler := range handlers {
@@ -314,24 +344,32 @@ func (c *Config) LoadHandlers(store *Store) {
 			continue
 		}
 
-		if h, ok := handler.(fosite.AuthorizeEndpointHandler); ok {
+		if h, ok := handler.(oauthelia2.AuthorizeEndpointHandler); ok {
 			x.AuthorizeEndpoint.Append(h)
 		}
 
-		if h, ok := handler.(fosite.TokenEndpointHandler); ok {
+		if h, ok := handler.(oauthelia2.TokenEndpointHandler); ok {
 			x.TokenEndpoint.Append(h)
 		}
 
-		if h, ok := handler.(fosite.TokenIntrospector); ok {
+		if h, ok := handler.(oauthelia2.TokenIntrospector); ok {
 			x.TokenIntrospection.Append(h)
 		}
 
-		if h, ok := handler.(fosite.RevocationHandler); ok {
+		if h, ok := handler.(oauthelia2.RevocationHandler); ok {
 			x.Revocation.Append(h)
 		}
 
-		if h, ok := handler.(fosite.PushedAuthorizeEndpointHandler); ok {
+		if h, ok := handler.(oauthelia2.PushedAuthorizeEndpointHandler); ok {
 			x.PushedAuthorizeEndpoint.Append(h)
+		}
+
+		if h, ok := handler.(oauthelia2.ResponseModeHandler); ok {
+			x.ResponseMode.Append(h)
+		}
+
+		if h, ok := handler.(oauthelia2.ResponseModeParameterHandler); ok {
+			x.ResponseModeParameter.Append(h)
 		}
 	}
 
@@ -388,7 +426,7 @@ func (c *Config) GetJWTMaxDuration(ctx context.Context) (duration time.Duration)
 
 // GetRedirectSecureChecker returns the redirect URL security validator.
 func (c *Config) GetRedirectSecureChecker(ctx context.Context) func(context.Context, *url.URL) (secure bool) {
-	return fosite.IsRedirectURISecure
+	return oauthelia2.IsRedirectURISecure
 }
 
 // GetOmitRedirectScopeParam must be set to true if the scope query param is to be omitted
@@ -536,27 +574,31 @@ func (c *Config) GetRefreshTokenScopes(ctx context.Context) (scopes []string) {
 }
 
 // GetScopeStrategy returns the scope strategy.
-func (c *Config) GetScopeStrategy(ctx context.Context) (strategy fosite.ScopeStrategy) {
+func (c *Config) GetScopeStrategy(ctx context.Context) (strategy oauthelia2.ScopeStrategy) {
 	if c.Strategy.Scope == nil {
-		c.Strategy.Scope = fosite.ExactScopeStrategy
+		c.Strategy.Scope = oauthelia2.ExactScopeStrategy
 	}
 
 	return c.Strategy.Scope
 }
 
 // GetAudienceStrategy returns the audience strategy.
-func (c *Config) GetAudienceStrategy(ctx context.Context) (strategy fosite.AudienceMatchingStrategy) {
+func (c *Config) GetAudienceStrategy(ctx context.Context) (strategy oauthelia2.AudienceMatchingStrategy) {
 	if c.Strategy.Audience == nil {
-		c.Strategy.Audience = fosite.DefaultAudienceMatchingStrategy
+		c.Strategy.Audience = oauthelia2.DefaultAudienceMatchingStrategy
 	}
 
 	return c.Strategy.Audience
 }
 
+func (c *Config) GetClientCredentialsFlowImplicitGrantRequested(ctx context.Context) (implicit bool) {
+	return c.ClientCredentialsFlowImplicitGrantRequested
+}
+
 // GetMinParameterEntropy returns the minimum parameter entropy.
 func (c *Config) GetMinParameterEntropy(_ context.Context) (entropy int) {
 	if c.MinParameterEntropy == 0 {
-		c.MinParameterEntropy = fosite.MinParameterEntropy
+		c.MinParameterEntropy = oauthelia2.MinParameterEntropy
 	}
 
 	return c.MinParameterEntropy
@@ -577,16 +619,16 @@ func (c *Config) GetSendDebugMessagesToClients(ctx context.Context) (send bool) 
 }
 
 // GetJWKSFetcherStrategy returns the JWKS fetcher strategy.
-func (c *Config) GetJWKSFetcherStrategy(ctx context.Context) (strategy fosite.JWKSFetcherStrategy) {
+func (c *Config) GetJWKSFetcherStrategy(ctx context.Context) (strategy oauthelia2.JWKSFetcherStrategy) {
 	if c.Strategy.JWKSFetcher == nil {
-		c.Strategy.JWKSFetcher = fosite.NewDefaultJWKSFetcherStrategy()
+		c.Strategy.JWKSFetcher = oauthelia2.NewDefaultJWKSFetcherStrategy()
 	}
 
 	return c.Strategy.JWKSFetcher
 }
 
 // GetClientAuthenticationStrategy returns the client authentication strategy.
-func (c *Config) GetClientAuthenticationStrategy(ctx context.Context) (strategy fosite.ClientAuthenticationStrategy) {
+func (c *Config) GetClientAuthenticationStrategy(ctx context.Context) (strategy oauthelia2.ClientAuthenticationStrategy) {
 	return c.Strategy.ClientAuthentication
 }
 
@@ -604,27 +646,28 @@ func (c *Config) GetFormPostHTMLTemplate(ctx context.Context) (tmpl *template.Te
 	return c.Templates.GetOpenIDConnectAuthorizeResponseFormPostTemplate()
 }
 
-// GetTokenURL returns the token URL.
-func (c *Config) GetTokenURL(ctx context.Context) (tokenURL string) {
+// GetFormPostResponseWriter returns a FormPostResponseWriter which should be utilized for writing the
+// form post response type.
+func (c *Config) GetFormPostResponseWriter(ctx context.Context) oauthelia2.FormPostResponseWriter {
+	return oauthelia2.DefaultFormPostResponseWriter
+}
+
+// GetTokenURLs returns the token URL.
+func (c *Config) GetTokenURLs(ctx context.Context) (tokenURLs []string) {
+	return []string{c.getEndpointURL(ctx, EndpointPathToken, c.TokenURL)}
+}
+
+func (c *Config) getEndpointURL(ctx context.Context, path, fallback string) (endpointURL string) {
 	if octx, ok := ctx.(Context); ok {
 		switch issuerURL, err := octx.IssuerURL(); err {
 		case nil:
-			return strings.ToLower(issuerURL.JoinPath(EndpointPathToken).String())
+			return strings.ToLower(issuerURL.JoinPath(path).String())
 		default:
-			return c.TokenURL
+			return fallback
 		}
 	}
 
-	return c.TokenURL
-}
-
-// GetSecretsHasher returns the client secrets hashing function.
-func (c *Config) GetSecretsHasher(ctx context.Context) (hasher fosite.Hasher) {
-	if c.Hash.ClientSecrets == nil {
-		c.Hash.ClientSecrets, _ = NewHasher()
-	}
-
-	return c.Hash.ClientSecrets
+	return fallback
 }
 
 // GetUseLegacyErrorFormat returns whether to use the legacy error format.
@@ -635,33 +678,28 @@ func (c *Config) GetUseLegacyErrorFormat(ctx context.Context) (use bool) {
 }
 
 // GetAuthorizeEndpointHandlers returns the authorize endpoint handlers.
-func (c *Config) GetAuthorizeEndpointHandlers(ctx context.Context) (handlers fosite.AuthorizeEndpointHandlers) {
+func (c *Config) GetAuthorizeEndpointHandlers(ctx context.Context) (handlers oauthelia2.AuthorizeEndpointHandlers) {
 	return c.Handlers.AuthorizeEndpoint
 }
 
 // GetTokenEndpointHandlers returns the token endpoint handlers.
-func (c *Config) GetTokenEndpointHandlers(ctx context.Context) (handlers fosite.TokenEndpointHandlers) {
+func (c *Config) GetTokenEndpointHandlers(ctx context.Context) (handlers oauthelia2.TokenEndpointHandlers) {
 	return c.Handlers.TokenEndpoint
 }
 
 // GetTokenIntrospectionHandlers returns the token introspection handlers.
-func (c *Config) GetTokenIntrospectionHandlers(ctx context.Context) (handlers fosite.TokenIntrospectionHandlers) {
+func (c *Config) GetTokenIntrospectionHandlers(ctx context.Context) (handlers oauthelia2.TokenIntrospectionHandlers) {
 	return c.Handlers.TokenIntrospection
 }
 
 // GetRevocationHandlers returns the revocation handlers.
-func (c *Config) GetRevocationHandlers(ctx context.Context) (handlers fosite.RevocationHandlers) {
+func (c *Config) GetRevocationHandlers(ctx context.Context) (handlers oauthelia2.RevocationHandlers) {
 	return c.Handlers.Revocation
 }
 
 // GetPushedAuthorizeEndpointHandlers returns the handlers.
-func (c *Config) GetPushedAuthorizeEndpointHandlers(ctx context.Context) fosite.PushedAuthorizeEndpointHandlers {
+func (c *Config) GetPushedAuthorizeEndpointHandlers(ctx context.Context) oauthelia2.PushedAuthorizeEndpointHandlers {
 	return c.Handlers.PushedAuthorizeEndpoint
-}
-
-// GetResponseModeHandlerExtension returns the response mode handler extension.
-func (c *Config) GetResponseModeHandlerExtension(ctx context.Context) (handler fosite.ResponseModeHandler) {
-	return c.Handlers.ResponseMode
 }
 
 // GetPushedAuthorizeRequestURIPrefix is the request URI prefix. This is
@@ -674,11 +712,11 @@ func (c *Config) GetPushedAuthorizeRequestURIPrefix(ctx context.Context) string 
 	return c.PAR.URIPrefix
 }
 
-// EnforcePushedAuthorize indicates if PAR is enforced. In this mode, a client
-// cannot pass authorize parameters at the 'authorize' endpoint. The 'authorize' endpoint
+// GetRequirePushedAuthorizationRequests indicates if the use of Pushed Authorization Requests is gobally required.
+// In this mode, a client cannot pass authorize parameters at the 'authorize' endpoint. The 'authorize' endpoint
 // must contain the PAR request_uri.
-func (c *Config) EnforcePushedAuthorize(ctx context.Context) bool {
-	return c.PAR.Enforced
+func (c *Config) GetRequirePushedAuthorizationRequests(ctx context.Context) (enforce bool) {
+	return c.PAR.Require
 }
 
 // GetPushedAuthorizeContextLifespan is the lifespan of the short-lived PAR context.
@@ -688,4 +726,73 @@ func (c *Config) GetPushedAuthorizeContextLifespan(ctx context.Context) (lifespa
 	}
 
 	return c.PAR.ContextLifespan
+}
+
+// GetVerifiableCredentialsNonceLifespan is the lifespan of the verifiable credentials' nonce.
+func (c *Config) GetVerifiableCredentialsNonceLifespan(ctx context.Context) (lifespan time.Duration) {
+	if c.Lifespans.VerifiableCredentialsNonce.Seconds() == 0 {
+		c.Lifespans.VerifiableCredentialsNonce = lifespanVerifiableCredentialsNonceDefault
+	}
+
+	return c.Lifespans.VerifiableCredentialsNonce
+}
+
+func (c *Config) GetResponseModeHandlers(ctx context.Context) oauthelia2.ResponseModeHandlers {
+	return c.Handlers.ResponseMode
+}
+
+func (c *Config) GetResponseModeParameterHandlers(ctx context.Context) oauthelia2.ResponseModeParameterHandlers {
+	return c.Handlers.ResponseModeParameter
+}
+
+func (c *Config) GetRevokeRefreshTokensExplicit(ctx context.Context) bool {
+	return c.RevokeRefreshTokensExplicit
+}
+
+func (c *Config) GetEnforceRevokeFlowRevokeRefreshTokensExplicitClient(ctx context.Context) bool {
+	return c.EnforceRevokeFlowRevokeRefreshTokensExplicitClient
+}
+
+func (c *Config) GetTokenURL(ctx context.Context) string {
+	return c.getEndpointURL(ctx, EndpointPathToken, c.TokenURL)
+}
+
+func (c *Config) GetRFC8628CodeLifespan(ctx context.Context) time.Duration {
+	if c.Lifespans.RFC8628Code.Seconds() <= 0 {
+		c.Lifespans.RFC8628Code = lifespanRFC8628CodeDefault
+	}
+
+	return c.Lifespans.RFC8628Code
+}
+
+func (c *Config) GetRFC8628UserVerificationURL(ctx context.Context) string {
+	return c.getEndpointURL(ctx, EndpointPathRFC8628UserVerificationURL, c.RFC8628UserVerificationURL)
+}
+
+func (c *Config) GetRFC8628TokenPollingInterval(ctx context.Context) (interval time.Duration) {
+	if c.Lifespans.RFC8628Polling.Seconds() == 0 {
+		c.Lifespans.RFC8628Polling = lifespanRFC8628PollingIntervalDefault
+	}
+
+	return c.Lifespans.RFC8628Polling
+}
+
+func (c *Config) GetRFC8628DeviceAuthorizeEndpointHandlers(ctx context.Context) oauthelia2.RFC8628DeviceAuthorizeEndpointHandlers {
+	return c.Handlers.RFC8628DeviceAuthorizeEndpoint
+}
+
+func (c *Config) GetRFC8628UserAuthorizeEndpointHandlers(ctx context.Context) oauthelia2.RFC8628UserAuthorizeEndpointHandlers {
+	return c.Handlers.RFC8628UserAuthorizeEndpoint
+}
+
+func (c *Config) GetRFC8693TokenTypes(ctx context.Context) map[string]oauthelia2.RFC8693TokenType {
+	return c.RFC8693.TokenTypes
+}
+
+func (c *Config) GetDefaultRFC8693RequestedTokenType(ctx context.Context) string {
+	return c.RFC8693.DefaultRequestedTokenType
+}
+
+func (c *Config) GetEnforceJWTProfileAccessTokens(ctx context.Context) (enforce bool) {
+	return c.EnforceJWTProfileAccessTokens
 }

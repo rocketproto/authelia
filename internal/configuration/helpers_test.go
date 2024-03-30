@@ -30,7 +30,7 @@ func TestGetEnvConfigMaps(t *testing.T) {
 		"mysecret.user_password",
 	}
 
-	keys, ignoredKeys := getEnvConfigMap(input, DefaultEnvPrefix, DefaultEnvDelimiter, deprecations)
+	keys, ignoredKeys := getEnvConfigMap(input, DefaultEnvPrefix, DefaultEnvDelimiter, deprecations, deprecationsMKM)
 
 	key, ok = keys[DefaultEnvPrefix+"MY_NON_SECRET_CONFIG_ITEM"]
 	assert.True(t, ok)
@@ -41,17 +41,19 @@ func TestGetEnvConfigMaps(t *testing.T) {
 	assert.Equal(t, key, "mysecret.user_password")
 
 	key, ok = keys[DefaultEnvPrefix+"MYOTHER_CONFIGKEY"]
-	assert.False(t, ok)
-	assert.Equal(t, key, "")
+	assert.True(t, ok)
+	assert.Equal(t, "myother.configkey", key)
 
 	key, ok = keys[DefaultEnvPrefix+"MYSECRET_PASSWORD"]
-	assert.False(t, ok)
-	assert.Equal(t, key, "")
+	assert.True(t, ok)
+	assert.Equal(t, "mysecret.password", key)
 
-	assert.Len(t, ignoredKeys, 3)
-	assert.Contains(t, ignoredKeys, DefaultEnvPrefix+"MYOTHER_CONFIGKEY_FILE")
-	assert.Contains(t, ignoredKeys, DefaultEnvPrefix+"MYSECRET_PASSWORD_FILE")
-	assert.Contains(t, ignoredKeys, DefaultEnvPrefix+"MYSECRET_USER_PASSWORD_FILE")
+	assert.Len(t, ignoredKeys, 6)
+	assert.Contains(t, ignoredKeys, DefaultEnvPrefix+MYOTHER_CONFIGKEY_FILE)
+	assert.Contains(t, ignoredKeys, DefaultEnvPrefix+MYSECRET_PASSWORD_FILE)
+	assert.Contains(t, ignoredKeys, DefaultEnvPrefix+MYSECRET_USER_PASSWORD_FILE)
+	assert.Contains(t, ignoredKeys, DefaultEnvPrefix+"IDENTITY_PROVIDERS_OIDC_ISSUER_PRIVATE_KEY_FILE")
+	assert.Contains(t, ignoredKeys, DefaultEnvPrefix+"IDENTITY_PROVIDERS_OIDC_ISSUER_CERTIFICATE_CHAIN_FILE")
 }
 
 func TestGetSecretConfigMapMockInput(t *testing.T) {
@@ -73,15 +75,15 @@ func TestGetSecretConfigMapMockInput(t *testing.T) {
 	assert.False(t, ok)
 	assert.Equal(t, key, "")
 
-	key, ok = keys[DefaultEnvPrefix+"MYOTHER_CONFIGKEY_FILE"]
+	key, ok = keys[DefaultEnvPrefix+MYOTHER_CONFIGKEY_FILE]
 	assert.True(t, ok)
 	assert.Equal(t, "myother.configkey", key)
 
-	key, ok = keys[DefaultEnvPrefix+"MYSECRET_PASSWORD_FILE"]
+	key, ok = keys[DefaultEnvPrefix+MYSECRET_PASSWORD_FILE]
 	assert.True(t, ok)
 	assert.Equal(t, "mysecret.password", key)
 
-	key, ok = keys[DefaultEnvPrefix+"MYSECRET_USER_PASSWORD_FILE"]
+	key, ok = keys[DefaultEnvPrefix+MYSECRET_USER_PASSWORD_FILE]
 	assert.True(t, ok)
 	assert.Equal(t, "mysecret.user_password", key)
 }
@@ -94,7 +96,7 @@ func TestGetSecretConfigMap(t *testing.T) {
 		ok  bool
 	)
 
-	key, ok = keys[DefaultEnvPrefix+"JWT_SECRET_FILE"]
+	key, ok = keys[DefaultEnvPrefix+JWT_SECRET_FILE]
 
 	assert.True(t, ok)
 	assert.Equal(t, "jwt_secret", key)

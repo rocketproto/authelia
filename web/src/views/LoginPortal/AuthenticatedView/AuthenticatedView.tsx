@@ -6,24 +6,31 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 
 import { LogoutRoute as SignOutRoute } from "@constants/Routes";
-import LoginLayout from "@layouts/LoginLayout";
+import MinimalLayout from "@layouts/MinimalLayout";
+import { UserInfo } from "@models/UserInfo";
 import Authenticated from "@views/LoginPortal/Authenticated";
 
 export interface Props {
-    name: string;
+    userInfo: UserInfo;
 }
 
 const AuthenticatedView = function (props: Props) {
-    const styles = useStyles();
-    const navigate = useNavigate();
     const { t: translate } = useTranslation();
+
+    const navigate = useNavigate();
+
+    const styles = useStyles();
 
     const handleLogoutClick = () => {
         navigate(SignOutRoute);
     };
 
     return (
-        <LoginLayout id="authenticated-stage" title={`${translate("Hi")} ${props.name}`} showBrand>
+        <MinimalLayout
+            id="authenticated-stage"
+            title={`${translate("Hi")} ${props.userInfo.display_name}`}
+            userInfo={props.userInfo}
+        >
             <Grid container>
                 <Grid item xs={12}>
                     <Button color="secondary" onClick={handleLogoutClick} id="logout-button">
@@ -34,11 +41,9 @@ const AuthenticatedView = function (props: Props) {
                     <Authenticated />
                 </Grid>
             </Grid>
-        </LoginLayout>
+        </MinimalLayout>
     );
 };
-
-export default AuthenticatedView;
 
 const useStyles = makeStyles((theme: Theme) => ({
     mainContainer: {
@@ -49,3 +54,5 @@ const useStyles = makeStyles((theme: Theme) => ({
         marginBottom: theme.spacing(2),
     },
 }));
+
+export default AuthenticatedView;

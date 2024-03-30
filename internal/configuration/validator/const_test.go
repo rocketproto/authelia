@@ -6,6 +6,8 @@ import (
 
 // Test constants.
 const (
+	id = "id"
+
 	testInvalid       = "invalid"
 	testJWTSecret     = "a_secret"
 	testLDAPBaseDN    = "base_dn"
@@ -21,12 +23,9 @@ const (
 )
 
 const (
+	authdot       = "auth."
 	exampleDotCom = "example.com"
 	rs256         = "rs256"
-)
-
-const (
-	local25 = "127.0.0.25"
 )
 
 var (

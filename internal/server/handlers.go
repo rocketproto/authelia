@@ -1,6 +1,7 @@
 package server
 
 import (
+	"crypto/tls"
 	"fmt"
 	"net"
 	"os"
@@ -63,6 +64,18 @@ func handleError(cpath string) func(ctx *fasthttp.RequestCtx, err error) {
 		default:
 			statusCode = fasthttp.StatusBadRequest
 			message = errMessageServerGeneric
+
+			if ctx.IsTLS() {
+				// We don't need to bother doing the TLS handshake check if we're sure it's already a TLS connection.
+				break
+			}
+
+			if matches := reTLSRequestOnPlainTextSocketErr.FindStringSubmatch(err.Error()); len(matches) == 3 {
+				if version, verr := utils.TLSVersionFromBytesString(matches[1] + matches[2]); verr == nil && version != -1 {
+					statusCode = fasthttp.StatusBadRequest
+					message = fmt.Sprintf(errFmtMessageServerTLSVersion, tls.VersionName(uint16(version)))
+				}
+			}
 		}
 
 		logging.Logger().WithFields(logrus.Fields{
@@ -113,7 +126,7 @@ func handleRouter(config *schema.Configuration, providers middlewares.Providers)
 	handlerLocales := newLocalesEmbeddedHandler()
 
 	bridge := middlewares.NewBridgeBuilder(*config, providers).
-		WithPreMiddlewares(middlewares.SecurityHeaders).Build()
+		WithPreMiddlewares(middlewares.SecurityHeadersBase).Build()
 
 	bridgeSwagger := middlewares.NewBridgeBuilder(*config, providers).
 		WithPreMiddlewares(middlewares.SecurityHeadersRelaxed).Build()
@@ -151,9 +164,9 @@ func handleRouter(config *schema.Configuration, providers middlewares.Providers)
 	r.GET("/locales/{language:[a-z]{1,3}}/{namespace:[a-z]+}.json", middlewares.AssetOverride(config.Server.AssetPath, 0, handlerLocales))
 
 	// Swagger.
-	r.HEAD("/api/", bridgeSwagger(serveOpenAPIHandler))
-	r.GET("/api/", bridgeSwagger(serveOpenAPIHandler))
-	r.OPTIONS("/api/", policyCORSPublicGET.HandleOPTIONS)
+	r.HEAD(prefixAPI, bridgeSwagger(serveOpenAPIHandler))
+	r.GET(prefixAPI, bridgeSwagger(serveOpenAPIHandler))
+	r.OPTIONS(prefixAPI, policyCORSPublicGET.HandleOPTIONS)
 
 	r.HEAD("/api/index.html", bridgeSwagger(serveOpenAPIHandler))
 	r.GET("/api/index.html", bridgeSwagger(serveOpenAPIHandler))
@@ -164,17 +177,22 @@ func handleRouter(config *schema.Configuration, providers middlewares.Providers)
 	r.OPTIONS("/api/openapi.yml", policyCORSPublicGET.HandleOPTIONS)
 
 	for _, file := range filesSwagger {
-		r.HEAD("/api/"+file, handlerPublicHTML)
-		r.GET("/api/"+file, handlerPublicHTML)
+		r.HEAD(prefixAPI+file, handlerPublicHTML)
+		r.GET(prefixAPI+file, handlerPublicHTML)
 	}
 
 	middlewareAPI := middlewares.NewBridgeBuilder(*config, providers).
-		WithPreMiddlewares(middlewares.SecurityHeaders, middlewares.SecurityHeadersNoStore, middlewares.SecurityHeadersCSPNone).
+		WithPreMiddlewares(middlewares.SecurityHeadersBase, middlewares.SecurityHeadersNoStore, middlewares.SecurityHeadersCSPNone).
 		Build()
 
 	middleware1FA := middlewares.NewBridgeBuilder(*config, providers).
-		WithPreMiddlewares(middlewares.SecurityHeaders, middlewares.SecurityHeadersNoStore, middlewares.SecurityHeadersCSPNone).
+		WithPreMiddlewares(middlewares.SecurityHeadersBase, middlewares.SecurityHeadersNoStore, middlewares.SecurityHeadersCSPNone).
 		WithPostMiddlewares(middlewares.Require1FA).
+		Build()
+
+	middlewareElevated1FA := middlewares.NewBridgeBuilder(*config, providers).
+		WithPreMiddlewares(middlewares.SecurityHeadersBase, middlewares.SecurityHeadersNoStore, middlewares.SecurityHeadersCSPNone).
+		WithPostMiddlewares(middlewares.RequireElevated).
 		Build()
 
 	r.HEAD("/api/health", middlewareAPI(handlers.HealthGET))
@@ -242,7 +260,9 @@ func handleRouter(config *schema.Configuration, providers middlewares.Providers)
 		// Password reset related endpoints.
 		r.POST("/api/reset-password/identity/start", middlewareAPI(handlers.ResetPasswordIdentityStart))
 		r.POST("/api/reset-password/identity/finish", middlewareAPI(handlers.ResetPasswordIdentityFinish))
+
 		r.POST("/api/reset-password", middlewareAPI(handlers.ResetPasswordPOST))
+		r.DELETE("/api/reset-password", middlewareAPI(handlers.ResetPasswordDELETE))
 	}
 
 	// Information about the user.
@@ -250,22 +270,40 @@ func handleRouter(config *schema.Configuration, providers middlewares.Providers)
 	r.POST("/api/user/info", middleware1FA(handlers.UserInfoPOST))
 	r.POST("/api/user/info/2fa_method", middleware1FA(handlers.MethodPreferencePOST))
 
+	// User Session Elevation.
+	middlewareDelaySecond := middlewares.ArbitraryDelay(time.Second)
+
+	r.GET("/api/user/session/elevation", middleware1FA(handlers.UserSessionElevationGET))
+	r.POST("/api/user/session/elevation", middleware1FA(handlers.UserSessionElevationPOST))
+	r.PUT("/api/user/session/elevation", middlewareDelaySecond(middleware1FA(handlers.UserSessionElevationPUT)))
+
+	r.DELETE("/api/user/session/elevation/{id}", middlewareAPI(handlers.UserSessionElevateDELETE))
+
 	if !config.TOTP.Disable {
 		// TOTP related endpoints.
-		r.GET("/api/user/info/totp", middleware1FA(handlers.UserTOTPInfoGET))
-		r.POST("/api/secondfactor/totp/identity/start", middleware1FA(handlers.TOTPIdentityStart))
-		r.POST("/api/secondfactor/totp/identity/finish", middleware1FA(handlers.TOTPIdentityFinish))
+		r.GET("/api/secondfactor/totp", middleware1FA(handlers.TimeBasedOneTimePasswordGET))
 		r.POST("/api/secondfactor/totp", middleware1FA(handlers.TimeBasedOneTimePasswordPOST))
+		r.DELETE("/api/secondfactor/totp", middleware1FA(handlers.TOTPConfigurationDELETE))
+
+		r.GET("/api/secondfactor/totp/register", middlewareElevated1FA(handlers.TOTPRegisterGET))
+		r.PUT("/api/secondfactor/totp/register", middlewareElevated1FA(handlers.TOTPRegisterPUT))
+		r.POST("/api/secondfactor/totp/register", middlewareElevated1FA(handlers.TOTPRegisterPOST))
+		r.DELETE("/api/secondfactor/totp/register", middlewareElevated1FA(handlers.TOTPRegisterDELETE))
 	}
 
 	if !config.WebAuthn.Disable {
-		// WebAuthn Endpoints.
-		r.POST("/api/secondfactor/webauthn/identity/start", middleware1FA(handlers.WebauthnIdentityStart))
-		r.POST("/api/secondfactor/webauthn/identity/finish", middleware1FA(handlers.WebauthnIdentityFinish))
-		r.POST("/api/secondfactor/webauthn/attestation", middleware1FA(handlers.WebAuthnAttestationPOST))
+		r.GET("/api/secondfactor/webauthn", middleware1FA(handlers.WebAuthnAssertionGET))
+		r.POST("/api/secondfactor/webauthn", middleware1FA(handlers.WebAuthnAssertionPOST))
 
-		r.GET("/api/secondfactor/webauthn/assertion", middleware1FA(handlers.WebAuthnAssertionGET))
-		r.POST("/api/secondfactor/webauthn/assertion", middleware1FA(handlers.WebAuthnAssertionPOST))
+		// Management of the WebAuthn credentials.
+		r.GET("/api/secondfactor/webauthn/credentials", middleware1FA(handlers.WebAuthnCredentialsGET))
+
+		r.PUT("/api/secondfactor/webauthn/credential/register", middlewareElevated1FA(handlers.WebAuthnRegistrationPUT))
+		r.POST("/api/secondfactor/webauthn/credential/register", middlewareElevated1FA(handlers.WebAuthnRegistrationPOST))
+		r.DELETE("/api/secondfactor/webauthn/credential/register", middlewareElevated1FA(handlers.WebAuthnRegistrationDELETE))
+
+		r.PUT("/api/secondfactor/webauthn/credential/{credentialID}", middlewareElevated1FA(handlers.WebAuthnCredentialPUT))
+		r.DELETE("/api/secondfactor/webauthn/credential/{credentialID}", middlewareElevated1FA(handlers.WebAuthnCredentialDELETE))
 	}
 
 	// Configure DUO api endpoint only if configuration exists.
@@ -298,7 +336,7 @@ func handleRouter(config *schema.Configuration, providers middlewares.Providers)
 
 	if providers.OpenIDConnect != nil {
 		bridgeOIDC := middlewares.NewBridgeBuilder(*config, providers).WithPreMiddlewares(
-			middlewares.SecurityHeaders, middlewares.SecurityHeadersCSPNoneOpenIDConnect, middlewares.SecurityHeadersNoStore,
+			middlewares.SecurityHeadersBase, middlewares.SecurityHeadersCSPNoneOpenIDConnect, middlewares.SecurityHeadersNoStore,
 		).Build()
 
 		r.GET("/api/oidc/consent", bridgeOIDC(handlers.OpenIDConnectConsentGET))
@@ -400,11 +438,11 @@ func handleRouter(config *schema.Configuration, providers middlewares.Providers)
 	r.NotFound = handleNotFound(bridge(serveIndexHandler))
 
 	handler := middlewares.LogRequest(r.Handler)
-	if config.Server.Address.Path() != "/" {
-		handler = middlewares.StripPath(config.Server.Address.Path())(handler)
+	if config.Server.Address.RouterPath() != "/" {
+		handler = middlewares.StripPath(config.Server.Address.RouterPath())(handler)
 	}
 
-	handler = middlewares.Wrap(middlewares.NewMetricsRequest(providers.Metrics), handler)
+	handler = middlewares.MultiWrap(handler, middlewares.RecoverPanic, middlewares.NewMetricsRequest(providers.Metrics))
 
 	return handler
 }

@@ -31,8 +31,7 @@ func NewStandaloneWebDriverSuite() *StandaloneWebDriverSuite {
 func (s *StandaloneWebDriverSuite) SetupSuite() {
 	s.BaseSuite.SetupSuite()
 
-	browser, err := StartRod()
-
+	browser, err := NewRodSession(RodSessionWithCredentials(s))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -65,7 +64,7 @@ func (s *StandaloneWebDriverSuite) TestShouldLetUserKnowHeIsAlreadyAuthenticated
 		s.collectScreenshot(ctx.Err(), s.Page)
 	}()
 
-	_ = s.doRegisterAndLogin2FA(s.T(), s.Context(ctx), "john", "password", false, "")
+	s.doRegisterTOTPAndLogin2FA(s.T(), s.Context(ctx), "john", "password", false, "")
 
 	// Visit home page to change context.
 	s.doVisit(s.T(), s.Context(ctx), HomeBaseURL)
@@ -108,7 +107,7 @@ func (s *StandaloneWebDriverSuite) TestShouldRedirectAlreadyAuthenticatedUser() 
 		s.collectScreenshot(ctx.Err(), s.Page)
 	}()
 
-	_ = s.doRegisterAndLogin2FA(s.T(), s.Context(ctx), "john", "password", false, "")
+	s.doRegisterTOTPAndLogin2FA(s.T(), s.Context(ctx), "john", "password", false, "")
 
 	// Visit home page to change context.
 	s.doVisit(s.T(), s.Context(ctx), HomeBaseURL)
@@ -129,7 +128,7 @@ func (s *StandaloneWebDriverSuite) TestShouldNotRedirectAlreadyAuthenticatedUser
 		s.collectScreenshot(ctx.Err(), s.Page)
 	}()
 
-	_ = s.doRegisterAndLogin2FA(s.T(), s.Context(ctx), "john", "password", false, "")
+	s.doRegisterTOTPAndLogin2FA(s.T(), s.Context(ctx), "john", "password", false, "")
 
 	// Visit home page to change context.
 	s.doVisit(s.T(), s.Context(ctx), HomeBaseURL)
@@ -137,7 +136,7 @@ func (s *StandaloneWebDriverSuite) TestShouldNotRedirectAlreadyAuthenticatedUser
 
 	// Visit the login page and wait for redirection to 2FA page with success icon displayed.
 	s.doVisit(s.T(), s.Context(ctx), fmt.Sprintf("%s?rd=https://secure.example.local:8080", GetLoginBaseURL(BaseDomain)))
-	s.verifyNotificationDisplayed(s.T(), s.Context(ctx), "Redirection was determined to be unsafe and aborted. Ensure the redirection URL is correct.")
+	s.verifyNotificationDisplayed(s.T(), s.Context(ctx), "Redirection was determined to be unsafe and aborted ensure the redirection URL is correct")
 }
 
 func (s *StandaloneWebDriverSuite) TestShouldCheckUserIsAskedToRegisterDevice() {
@@ -162,7 +161,7 @@ func (s *StandaloneWebDriverSuite) TestShouldCheckUserIsAskedToRegisterDevice() 
 	s.WaitElementLocatedByClassName(s.T(), s.Context(ctx), "state-not-registered")
 
 	// Then register the TOTP factor.
-	s.doRegisterTOTP(s.T(), s.Context(ctx))
+	s.doOpenSettingsAndRegisterTOTP(s.T(), s.Context(ctx), username)
 	// And logout.
 	s.doLogout(s.T(), s.Context(ctx))
 
@@ -331,8 +330,12 @@ func (s *StandaloneSuite) Test1FAScenario() {
 	suite.Run(s.T(), New1FAScenario())
 }
 
-func (s *StandaloneSuite) Test2FAScenario() {
-	suite.Run(s.T(), New2FAScenario())
+func (s *StandaloneSuite) TestTwoFactorTOTPScenario() {
+	suite.Run(s.T(), NewTwoFactorTOTPScenario())
+}
+
+func (s *StandaloneSuite) TestTwoFactorWebAuthnScenario() {
+	suite.Run(s.T(), NewTwoFactorWebAuthnScenario())
 }
 
 func (s *StandaloneSuite) TestBypassPolicyScenario() {

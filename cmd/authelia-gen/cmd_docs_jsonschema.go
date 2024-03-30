@@ -20,7 +20,7 @@ import (
 
 func newDocsJSONSchemaCmd() *cobra.Command {
 	cmd := &cobra.Command{
-		Use:   "json-schema",
+		Use:   pathJSONSchema,
 		Short: "Generate docs JSON schema",
 		RunE:  rootSubCommandsRunE,
 
@@ -147,7 +147,7 @@ func docsJSONSchemaExportsWebAuthnRunE(cmd *cobra.Command, args []string) (err e
 		return err
 	}
 
-	return docsJSONSchemaGenerateRunE(cmd, args, version, schemaDir, &model.WebAuthnDeviceDataExport{}, dir, file, nil)
+	return docsJSONSchemaGenerateRunE(cmd, args, version, schemaDir, &model.WebAuthnCredentialDataExport{}, dir, file, nil)
 }
 
 func docsJSONSchemaExportsIdentifiersRunE(cmd *cobra.Command, args []string) (err error) {
@@ -250,7 +250,7 @@ func docsJSONSchemaGenerateRunE(cmd *cobra.Command, _ []string, version *model.S
 	versions, _ = cmd.Flags().GetStringSlice(cmdFlagVersions)
 
 	if len(versions) == 0 {
-		versions = []string{metaVersionNext, metaVersionLatest}
+		versions = []string{metaVersionLatest, metaVersionCurrent}
 	}
 
 	next := utils.IsStringInSlice(metaVersionNext, versions)
@@ -308,13 +308,13 @@ func writeJSONSchema(schema *jsonschema.Schema, dir, version, file string) (err 
 		return err
 	}
 
-	if _, err = os.Stat(filepath.Join(dir, version, "json-schema")); err != nil && os.IsNotExist(err) {
-		if err = os.MkdirAll(filepath.Join(dir, version, "json-schema"), 0755); err != nil {
+	if _, err = os.Stat(filepath.Join(dir, version, pathJSONSchema)); err != nil && os.IsNotExist(err) {
+		if err = os.MkdirAll(filepath.Join(dir, version, pathJSONSchema), 0755); err != nil {
 			return err
 		}
 	}
 
-	if f, err = os.Create(filepath.Join(dir, version, "json-schema", file+".json")); err != nil {
+	if f, err = os.Create(filepath.Join(dir, version, pathJSONSchema, file+extJSON)); err != nil {
 		return err
 	}
 
@@ -359,16 +359,23 @@ func jsonschemaKoanfMapper(t reflect.Type) *jsonschema.Schema {
 		}
 	case "schema.CryptographicKey":
 		return &jsonschema.Schema{
-			Type: jsonschema.TypeString,
+			Type:    jsonschema.TypeString,
+			Pattern: `^-{5}BEGIN (((RSA|EC) )?(PRIVATE|PUBLIC) KEY|CERTIFICATE)-{5}\n([a-zA-Z0-9\/+]{1,64}\n)+([a-zA-Z0-9\/+]{1,64}[=]{0,2})\n-{5}END (((RSA|EC) )?(PRIVATE|PUBLIC) KEY|CERTIFICATE)-{5}\n?$`,
 		}
 	case "schema.CryptographicPrivateKey":
 		return &jsonschema.Schema{
 			Type:    jsonschema.TypeString,
-			Pattern: `^-{5}(BEGIN ((RSA|EC) )?PRIVATE KEY-{5}\n([a-zA-Z0-9/+]{1,64}\n)+([a-zA-Z0-9/+]{1,64}[=]{0,2})\n-{5}END ((RSA|EC) )?PRIVATE KEY-{5}\n?)+$`,
+			Pattern: `^-{5}BEGIN ((RSA|EC) )?PRIVATE KEY-{5}\n([a-zA-Z0-9\/+]{1,64}\n)+([a-zA-Z0-9\/+]{1,64}[=]{0,2})\n-{5}END ((RSA|EC) )?PRIVATE KEY-{5}\n?$`,
 		}
-	case "rsa.PrivateKey", "*rsa.PrivateKey", "ecdsa.PrivateKey", "*.ecdsa.PrivateKey":
+	case "rsa.PrivateKey", "*rsa.PrivateKey":
 		return &jsonschema.Schema{
-			Type: jsonschema.TypeString,
+			Type:    jsonschema.TypeString,
+			Pattern: `^-{5}(BEGIN (RSA )?PRIVATE KEY-{5}\n([a-zA-Z0-9\/+]{1,64}\n)+([a-zA-Z0-9\/+]{1,64}[=]{0,2})\n-{5}END (RSA )?PRIVATE KEY-{5}\n?)+$`,
+		}
+	case "ecdsa.PrivateKey", "*.ecdsa.PrivateKey":
+		return &jsonschema.Schema{
+			Type:    jsonschema.TypeString,
+			Pattern: `^-{5}(BEGIN ((EC )?PRIVATE KEY-{5}\n([a-zA-Z0-9\/+]{1,64}\n)+([a-zA-Z0-9\/+]{1,64}[=]{0,2})\n-{5}END (EC )?PRIVATE KEY-{5}\n?)+$`,
 		}
 	case "mail.Address", "*mail.Address":
 		return &jsonschema.Schema{
