@@ -1,4 +1,4 @@
-import React, { Fragment, ReactNode, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 
 import { AccountBox, Autorenew, CheckBox, Contacts, Drafts, Group } from "@mui/icons-material";
 import {
@@ -25,10 +25,7 @@ import { useRedirector } from "@hooks/Redirector";
 import { useUserInfoGET } from "@hooks/UserInfo";
 import LoginLayout from "@layouts/LoginLayout";
 import { ConsentGetResponseBody, acceptConsent, getConsentResponse, rejectConsent } from "@services/Consent";
-import LoadingPage from "@views/LoadingPage/LoadingPage";
-import { ComponentOrLoading } from "@root/views/Generic/ComponentOrLoading";
-
-export interface Props { }
+import { ComponentOrLoading } from "@views/Generic/ComponentOrLoading";
 
 function scopeNameToAvatar(id: string) {
     switch (id) {
@@ -47,7 +44,7 @@ function scopeNameToAvatar(id: string) {
     }
 }
 
-const ConsentView = function (props: Props) {
+const ConsentView = function () {
     const styles = useStyles();
     const { t: translate } = useTranslation();
     const navigate = useNavigate();
@@ -278,4 +275,3 @@ const useStyles = makeStyles((theme: Theme) => ({
 }));
 
 export default ConsentView;
-

@@ -1,4 +1,4 @@
-import React, { Fragment, ReactNode, useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 
 import { Route, Routes, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 
@@ -20,11 +20,10 @@ import { useUserInfoPOST } from "@hooks/UserInfo";
 import { SecondFactorMethod } from "@models/Methods";
 import { checkSafeRedirection } from "@services/SafeRedirection";
 import { AuthenticationLevel } from "@services/State";
-import LoadingPage from "@views/LoadingPage/LoadingPage";
+import { ComponentOrLoading } from "@views/Generic/ComponentOrLoading";
 import AuthenticatedView from "@views/LoginPortal/AuthenticatedView/AuthenticatedView";
 import FirstFactorForm from "@views/LoginPortal/FirstFactor/FirstFactorForm";
 import SecondFactorForm from "@views/LoginPortal/SecondFactor/SecondFactorForm";
-import { ComponentOrLoading } from "../Generic/ComponentOrLoading";
 
 export interface Props {
     duoSelfEnrollment: boolean;

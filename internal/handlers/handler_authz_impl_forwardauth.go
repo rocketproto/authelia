@@ -33,38 +33,30 @@ func handleAuthzGetObjectForwardAuth(ctx *middlewares.AutheliaCtx) (object autho
 	return authorization.NewObjectRaw(targetURL, method), nil
 }
 
-// Forward Auth.
 func handleAuthzUnauthorizedForwardAuth(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL) {
 	var (
 		statusCode int
 	)
 
-	ctx.Logger.Infof("Using: FORWARD AUTH METHOD") // REMOVE.
-
-	// Checks if request is expecting html or is from a browser.
-	if isRenderingHTML(ctx) {
+	if isRequestingWebpage(ctx) {
 		statusCode = fasthttp.StatusUnauthorized
 	} else {
-		statusCode = determineStatusCodeFromAuthn(authn)
+		statusCode = deriveStatusCodeFromAuthnMethod(authn)
 	}
 
-	handleSpecialRedirect(ctx, authn, redirectionURL, statusCode)
+	handleAuthzSpecialRedirect(ctx, authn, redirectionURL, statusCode)
 }
 
-// Forward Auth.
 func handleAuthzForbiddenForwardAuth(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL) {
 	var (
 		statusCode int
 	)
 
-	ctx.Logger.Infof("Using: FORWARD AUTH METHOD") // REMOVE.
-
-	// Checks if request is expecting html or is from a browser.
-	if isRenderingHTML(ctx) {
+	if isRequestingWebpage(ctx) {
 		statusCode = fasthttp.StatusForbidden
 	} else {
-		statusCode = determineStatusCodeFromAuthn(authn)
+		statusCode = deriveStatusCodeFromAuthnMethod(authn)
 	}
 
-	handleSpecialRedirect(ctx, authn, redirectionURL, statusCode)
+	handleAuthzSpecialRedirect(ctx, authn, redirectionURL, statusCode)
 }

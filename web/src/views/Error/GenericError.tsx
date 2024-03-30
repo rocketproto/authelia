@@ -4,8 +4,7 @@ import { Theme, Typography } from "@mui/material";
 import makeStyles from "@mui/styles/makeStyles";
 import { useTranslation } from "react-i18next";
 
-import FailureIcon from "@root/components/FailureIcon";
-import { ErrorComponent, ErrorProps } from "@root/models/Errors";
+import FailureIcon from "@components/FailureIcon";
 
 const GenericError = function () {
     const styles = useStyles();

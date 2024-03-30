@@ -33,38 +33,30 @@ func handleAuthzGetObjectExtAuthz(ctx *middlewares.AutheliaCtx) (object authoriz
 	return authorization.NewObjectRaw(targetURL, method), nil
 }
 
-// External Authz.
 func handleAuthzUnauthorizedExtAuthz(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL) {
 	var (
 		statusCode int
 	)
 
-	ctx.Logger.Infof("Using: EXT AUTH METHOD") // REMOVE.
-
-	// Checks if request is expecting html or is from a browser.
-	if isRenderingHTML(ctx) {
+	if isRequestingWebpage(ctx) {
 		statusCode = fasthttp.StatusUnauthorized
 	} else {
-		statusCode = determineStatusCodeFromAuthn(authn)
+		statusCode = deriveStatusCodeFromAuthnMethod(authn)
 	}
 
-	handleSpecialRedirect(ctx, authn, redirectionURL, statusCode)
+	handleAuthzSpecialRedirect(ctx, authn, redirectionURL, statusCode)
 }
 
-// External Authz.
 func handleAuthzForbiddenExtAuthz(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL) {
 	var (
 		statusCode int
 	)
 
-	ctx.Logger.Infof("Using: EXT AUTH METHOD") // REMOVE.
-
-	// Checks if request is expecting html or is from a browser.
-	if isRenderingHTML(ctx) {
-		statusCode = fasthttp.StatusUnauthorized
+	if isRequestingWebpage(ctx) {
+		statusCode = fasthttp.StatusForbidden
 	} else {
-		statusCode = determineStatusCodeFromAuthn(authn)
+		statusCode = deriveStatusCodeFromAuthnMethod(authn)
 	}
 
-	handleSpecialRedirect(ctx, authn, redirectionURL, statusCode)
+	handleAuthzSpecialRedirect(ctx, authn, redirectionURL, statusCode)
 }

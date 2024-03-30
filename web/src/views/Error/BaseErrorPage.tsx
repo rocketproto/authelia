@@ -1,31 +1,31 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 
 import { Button, Grid, Theme } from "@mui/material";
 import makeStyles from "@mui/styles/makeStyles";
 import { useTranslation } from "react-i18next";
-import { Navigate, To, useNavigate, useSearchParams } from "react-router-dom";
+import { Path, useNavigate, useSearchParams } from "react-router-dom";
 
 import { IndexRoute, LogoutRoute } from "@constants/Routes";
-import LoginLayout from "@layouts/LoginLayout";
-import GenericError from "@views/Error/GenericError";
-import { Errors } from "@models/Errors";
 import { ErrorCode, RedirectionURL } from "@constants/SearchParams";
-import ForbiddenError from "@views/Error/NamedErrors/ForbiddenError";
-import { useUserInfoPOST } from "@hooks/UserInfo";
+import { useNotifications } from "@hooks/NotificationsContext";
 import { useAutheliaState } from "@hooks/State";
-import { ComponentOrLoading } from "@views/Generic/ComponentOrLoading";
+import { useUserInfoPOST } from "@hooks/UserInfo";
+import LoginLayout from "@layouts/LoginLayout";
+import { Errors } from "@models/Errors";
 import { AuthenticationLevel } from "@services/State";
-import { useConfiguration } from "@hooks/Configuration";
+import GenericError from "@views/Error/GenericError";
+import ForbiddenError from "@views/Error/NamedErrors/ForbiddenError";
+import { ComponentOrLoading } from "@views/Generic/ComponentOrLoading";
 
 const BaseErrorView = function () {
     const styles = useStyles();
     const navigate = useNavigate();
     const { t: translate } = useTranslation();
-    const NavigateTo: To = { pathname: LogoutRoute };
+    const [navigationRoute] = useState({ pathname: LogoutRoute } as Partial<Path>);
+    const { createErrorNotification } = useNotifications();
     const [state, fetchState, , fetchStateError] = useAutheliaState();
     const [searchParams] = useSearchParams();
-    let searchParamsOverride = new URLSearchParams();
-    const [configuration, fetchConfiguration, , fetchConfigurationError] = useConfiguration();
+    const [searchParamsOverride] = useState(new URLSearchParams());
     const [userInfo, fetchUserInfo, , fetchUserInfoError] = useUserInfoPOST();
 
     // Fetch the state when portal is mounted.
@@ -37,23 +37,26 @@ const BaseErrorView = function () {
     useEffect(() => {
         if (state && state.authentication_level >= AuthenticationLevel.OneFactor) {
             fetchUserInfo();
-            fetchConfiguration();
         }
-        console.log("STATE:", state);
-    }, [state, fetchUserInfo, fetchConfiguration]);
+    }, [state, fetchUserInfo]);
+
+    // Display an error when state fetching fails
+    useEffect(() => {
+        if (fetchStateError) {
+            createErrorNotification("There was an issue fetching the current user state");
+        }
+    }, [fetchStateError, createErrorNotification]);
 
     useEffect(() => {
         switch (searchParams.get(ErrorCode)) {
             case Errors.forbidden: {
-                console.log("Forbidden Handling:")
                 if (searchParams.has(RedirectionURL)) {
                     searchParamsOverride.set(RedirectionURL, searchParams.get(RedirectionURL) as string);
-                    NavigateTo.search = searchParamsOverride.toString();
+                    navigationRoute.search = searchParamsOverride.toString();
                 }
                 if (state?.authentication_level === AuthenticationLevel.Unauthenticated) {
-                    NavigateTo.pathname = IndexRoute;
-                    // navigate(NavigateTo);
-                    console.warn("Navigating to: ", NavigateTo);
+                    navigationRoute.pathname = IndexRoute;
+                    navigate(navigationRoute);
                 }
                 break;
             }
@@ -61,12 +64,14 @@ const BaseErrorView = function () {
                 break;
             }
         }
-    }, [
-        state,
-        userInfo,
-        fetchUserInfoError,
-        searchParams,
-    ]);
+    }, [state, searchParams, navigationRoute, navigate, searchParamsOverride]);
+
+    // Display an error when user information fetching fails
+    useEffect(() => {
+        if (fetchUserInfoError) {
+            createErrorNotification("There was an issue retrieving user information");
+        }
+    }, [fetchUserInfoError, createErrorNotification]);
 
     const handleErrorCodeJSX = () => {
         switch (searchParams.get(ErrorCode)) {
@@ -80,20 +85,14 @@ const BaseErrorView = function () {
     };
 
     const handleLogoutClick = () => {
-        // NOTE Not working with RD
-        navigate(NavigateTo);
+        navigate(navigationRoute);
     };
 
-    const infoLoaded =
-        userInfo !== undefined;
+    const infoLoaded = userInfo !== undefined;
 
     return (
         <ComponentOrLoading ready={infoLoaded}>
-            <LoginLayout
-                id="base-error-stage"
-                title={`${translate("Hi")} ${userInfo?.display_name || ""}`}
-                showBrand
-            >
+            <LoginLayout id="base-error-stage" title={`${translate("Hi")} ${userInfo?.display_name || ""}`} showBrand>
                 <Grid container>
                     <Grid item xs={12}>
                         <Button color="secondary" onClick={handleLogoutClick} id="logout-button">

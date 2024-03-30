@@ -113,16 +113,11 @@ func hasInvalidMethodCharacters(v []byte) bool {
 	return false
 }
 
-// Needs renaming to be accurate
-// Check order of functions?
-func isRenderingHTML(ctx *middlewares.AutheliaCtx) (isScreen bool) {
+func isRequestingWebpage(ctx *middlewares.AutheliaCtx) bool {
 	return ctx.IsXHR() || !ctx.AcceptsMIME("text/html")
 }
 
-// Needs renaming to be accurate 'returnStatusCodeFromWhat?'
-// Check order of functions?
-// Pass additional checks through?
-func determineStatusCodeFromAuthn(authn *Authn) (statusCode int) {
+func deriveStatusCodeFromAuthnMethod(authn *Authn) (statusCode int) {
 	switch authn.Object.Method {
 	case fasthttp.MethodGet, fasthttp.MethodOptions, fasthttp.MethodHead:
 		return fasthttp.StatusFound
@@ -131,9 +126,7 @@ func determineStatusCodeFromAuthn(authn *Authn) (statusCode int) {
 	}
 }
 
-// Needs renaming to be accurate 'returnStatusCodeFromWhat?'
-// Check order of functions?
-func handleSpecialRedirect(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL, statusCode int) {
+func handleAuthzSpecialRedirect(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL, statusCode int) {
 	ctx.Logger.Infof(logFmtAuthzRedirect, authn.Object.String(), authn.Method, authn.Username, statusCode, redirectionURL)
 
 	switch authn.Object.Method {

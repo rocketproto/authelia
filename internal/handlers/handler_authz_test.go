@@ -144,7 +144,29 @@ func (s *AuthzSuite) TestShouldApplyDefaultPolicy() {
 
 	authz.Handler(mock.Ctx)
 
-	s.Equal(fasthttp.StatusForbidden, mock.Ctx.Response.StatusCode())
+	switch s.implementation {
+	case AuthzImplAuthRequest, AuthzImplLegacy:
+		s.Equal(fasthttp.StatusForbidden, mock.Ctx.Response.StatusCode())
+	default:
+		s.Equal(fasthttp.StatusFound, mock.Ctx.Response.StatusCode())
+		location := s.RequireParseRequestURI(mock.Ctx.Configuration.Session.Cookies[0].AutheliaURL.String())
+
+		if location.Path == "" {
+			location.Path = "/"
+		}
+
+		location.Path += baseErrorPath
+
+		query := location.Query()
+		query.Set(queryArgRD, targetURI.String())
+		query.Set(queryArgRM, fasthttp.MethodGet)
+		query.Set(queryArgEC, errorForbidden)
+
+		location.RawQuery = query.Encode()
+
+		s.Equal(location.String(), string(mock.Ctx.Response.Header.Peek(fasthttp.HeaderLocation)))
+	}
+
 	s.Equal([]byte(nil), mock.Ctx.Response.Header.Peek(fasthttp.HeaderWWWAuthenticate))
 	s.Equal([]byte(nil), mock.Ctx.Response.Header.Peek(fasthttp.HeaderProxyAuthenticate))
 }
@@ -476,7 +498,29 @@ func (s *AuthzSuite) TestShouldApplyPolicyOfDenyDomain() {
 
 	authz.Handler(mock.Ctx)
 
-	s.Equal(fasthttp.StatusForbidden, mock.Ctx.Response.StatusCode())
+	switch s.implementation {
+	case AuthzImplAuthRequest, AuthzImplLegacy:
+		s.Equal(fasthttp.StatusForbidden, mock.Ctx.Response.StatusCode())
+	default:
+		s.Equal(fasthttp.StatusFound, mock.Ctx.Response.StatusCode())
+		location := s.RequireParseRequestURI(mock.Ctx.Configuration.Session.Cookies[0].AutheliaURL.String())
+
+		if location.Path == "" {
+			location.Path = "/"
+		}
+
+		location.Path += baseErrorPath
+
+		query := location.Query()
+		query.Set(queryArgRD, targetURI.String())
+		query.Set(queryArgRM, fasthttp.MethodGet)
+		query.Set(queryArgEC, errorForbidden)
+
+		location.RawQuery = query.Encode()
+
+		s.Equal(location.String(), string(mock.Ctx.Response.Header.Peek(fasthttp.HeaderLocation)))
+	}
+
 	s.Equal([]byte(nil), mock.Ctx.Response.Header.Peek(fasthttp.HeaderWWWAuthenticate))
 	s.Equal([]byte(nil), mock.Ctx.Response.Header.Peek(fasthttp.HeaderProxyAuthenticate))
 }
@@ -1126,7 +1170,28 @@ func (s *AuthzSuite) TestShouldUpdateRemovedUserGroupsFromBackendAndDeny() {
 
 	authz.Handler(mock.Ctx)
 
-	s.Equal(fasthttp.StatusForbidden, mock.Ctx.Response.StatusCode())
+	switch s.implementation {
+	case AuthzImplAuthRequest, AuthzImplLegacy:
+		s.Equal(fasthttp.StatusForbidden, mock.Ctx.Response.StatusCode())
+	default:
+		s.Equal(fasthttp.StatusFound, mock.Ctx.Response.StatusCode())
+		location := s.RequireParseRequestURI(mock.Ctx.Configuration.Session.Cookies[0].AutheliaURL.String())
+
+		if location.Path == "" {
+			location.Path = "/"
+		}
+
+		location.Path += baseErrorPath
+
+		query := location.Query()
+		query.Set(queryArgRD, targetURI.String())
+		query.Set(queryArgRM, fasthttp.MethodGet)
+		query.Set(queryArgEC, errorForbidden)
+
+		location.RawQuery = query.Encode()
+
+		s.Equal(location.String(), string(mock.Ctx.Response.Header.Peek(fasthttp.HeaderLocation)))
+	}
 
 	userSession, err = mock.Ctx.GetSession()
 	s.Require().NoError(err)
@@ -1195,7 +1260,28 @@ func (s *AuthzSuite) TestShouldUpdateAddedUserGroupsFromBackendAndDeny() {
 
 	authz.Handler(mock.Ctx)
 
-	s.Equal(fasthttp.StatusForbidden, mock.Ctx.Response.StatusCode())
+	switch s.implementation {
+	case AuthzImplAuthRequest, AuthzImplLegacy:
+		s.Equal(fasthttp.StatusForbidden, mock.Ctx.Response.StatusCode())
+	default:
+		s.Equal(fasthttp.StatusFound, mock.Ctx.Response.StatusCode())
+		location := s.RequireParseRequestURI(mock.Ctx.Configuration.Session.Cookies[0].AutheliaURL.String())
+
+		if location.Path == "" {
+			location.Path = "/"
+		}
+
+		location.Path += baseErrorPath
+
+		query := location.Query()
+		query.Set(queryArgRD, targetURI.String())
+		query.Set(queryArgRM, fasthttp.MethodGet)
+		query.Set(queryArgEC, errorForbidden)
+
+		location.RawQuery = query.Encode()
+
+		s.Equal(location.String(), string(mock.Ctx.Response.Header.Peek(fasthttp.HeaderLocation)))
+	}
 
 	userSession, err = mock.Ctx.GetSession()
 	s.Require().NoError(err)

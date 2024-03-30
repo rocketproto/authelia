@@ -36,14 +36,10 @@ func handleAuthzGetObjectAuthRequest(ctx *middlewares.AutheliaCtx) (object autho
 	return authorization.NewObjectRaw(targetURL, method), nil
 }
 
-// Auth Request.
 func handleAuthzUnauthorizedAuthRequest(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL) {
-	ctx.Logger.Infof("Using: AUTH REQUEST METHOD") // REMOVE.
-	handleSpecialRedirect(ctx, authn, redirectionURL, fasthttp.StatusUnauthorized)
+	handleAuthzSpecialRedirect(ctx, authn, redirectionURL, fasthttp.StatusUnauthorized)
 }
 
-// Auth Request.
 func handleAuthzForbiddenAuthRequest(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL) {
-	ctx.Logger.Infof("Using: AUTH REQUEST METHOD") // REMOVE.
-	handleSpecialRedirect(ctx, authn, redirectionURL, fasthttp.StatusForbidden)
+	handleAuthzSpecialRedirect(ctx, authn, redirectionURL, fasthttp.StatusForbidden)
 }

@@ -3,13 +3,13 @@ export enum Errors {
 }
 
 export interface ErrorInfo {
-    errorCode?: string
-    redirectionUrl?: string,
+    errorCode?: string;
+    redirectionUrl?: string;
 }
 
 export interface ErrorProps {
-    info: ErrorInfo
-    children?: any
+    info: ErrorInfo;
+    children?: any;
 }
 
-export type ErrorComponent = (props: ErrorProps) => JSX.Element
+export type ErrorComponent = (props: ErrorProps) => JSX.Element;

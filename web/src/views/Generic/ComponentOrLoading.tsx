@@ -1,6 +1,6 @@
 import { Fragment, ReactNode } from "react";
-import LoadingPage from "@views/LoadingPage/LoadingPage";
 
+import LoadingPage from "@views/LoadingPage/LoadingPage";
 
 interface ComponentOrLoadingProps {
     ready: boolean;
@@ -17,5 +17,4 @@ export const ComponentOrLoading = (props: ComponentOrLoadingProps) => {
             {props.ready ? props.children : null}
         </Fragment>
     );
-}
-
+};

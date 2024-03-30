@@ -8,8 +8,8 @@ import { Route, BrowserRouter as Router, Routes } from "react-router-dom";
 
 import NotificationBar from "@components/NotificationBar";
 import {
-    ErrorRoute,
     ConsentRoute,
+    ErrorRoute,
     IndexRoute,
     LogoutRoute,
     RegisterOneTimePasswordRoute,
@@ -30,7 +30,7 @@ import {
 } from "@utils/Configuration";
 import RegisterOneTimePassword from "@views/DeviceRegistration/RegisterOneTimePassword";
 import RegisterWebAuthn from "@views/DeviceRegistration/RegisterWebAuthn";
-import BaseErrorView from "./views/Error/BaseErrorPage";
+import BaseErrorView from "@views/Error/BaseErrorPage";
 import BaseLoadingPage from "@views/LoadingPage/BaseLoadingPage";
 import ConsentView from "@views/LoginPortal/ConsentView/ConsentView";
 import LoginPortal from "@views/LoginPortal/LoginPortal";

@@ -1,12 +1,12 @@
-import React, { useEffect } from "react";
+import React from "react";
 
 import { Theme, Typography } from "@mui/material";
 import makeStyles from "@mui/styles/makeStyles";
 import { useTranslation } from "react-i18next";
-
-import FailureIcon from "@root/components/FailureIcon";
-import { RedirectionURL } from "@root/constants/SearchParams";
 import { useSearchParams } from "react-router-dom";
+
+import FailureIcon from "@components/FailureIcon";
+import { RedirectionURL } from "@constants/SearchParams";
 
 const ForbiddenError = function () {
     const styles = useStyles();
@@ -27,9 +27,7 @@ const ForbiddenError = function () {
                 <FailureIcon />
             </div>
             <Typography>{translate(getMessage())}</Typography>
-            <Typography className={styles.textEllipsis}>
-                {searchParams.get(RedirectionURL) || ""}
-            </Typography>
+            <Typography className={styles.textEllipsis}>{searchParams.get(RedirectionURL) || ""}</Typography>
         </div>
     );
 };
@@ -44,5 +42,5 @@ const useStyles = makeStyles((theme: Theme) => ({
     textEllipsis: {
         overflow: "hidden",
         textOverflow: "ellipsis",
-    }
+    },
 }));
