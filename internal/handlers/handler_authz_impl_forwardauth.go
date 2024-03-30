@@ -38,7 +38,7 @@ func handleAuthzUnauthorizedForwardAuth(ctx *middlewares.AutheliaCtx, authn *Aut
 		statusCode int
 	)
 
-	if isRequestingWebpage(ctx) {
+	if isNotRequestingWebpage(ctx) {
 		statusCode = fasthttp.StatusUnauthorized
 	} else {
 		statusCode = deriveStatusCodeFromAuthnMethod(authn)
@@ -52,7 +52,7 @@ func handleAuthzForbiddenForwardAuth(ctx *middlewares.AutheliaCtx, authn *Authn,
 		statusCode int
 	)
 
-	if isRequestingWebpage(ctx) {
+	if isNotRequestingWebpage(ctx) {
 		statusCode = fasthttp.StatusForbidden
 	} else {
 		statusCode = deriveStatusCodeFromAuthnMethod(authn)

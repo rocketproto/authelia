@@ -37,7 +37,7 @@ func isTokenUserValidFor2FARegistration(ctx *middlewares.AutheliaCtx, username s
 var TOTPIdentityStart = middlewares.IdentityVerificationStart(middlewares.IdentityVerificationStartArgs{
 	MailTitle:             "Register your mobile",
 	MailButtonContent:     "Register",
-	TargetEndpoint:        "/one-time-password/register", // NOTE.
+	TargetEndpoint:        "/one-time-password/register",
 	ActionClaim:           ActionTOTPRegistration,
 	IdentityRetrieverFunc: identityRetrieverFromSession,
 }, nil)

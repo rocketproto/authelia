@@ -42,7 +42,7 @@ func handleAuthzUnauthorizedLegacy(ctx *middlewares.AutheliaCtx, authn *Authn, r
 	}
 
 	switch {
-	case isRequestingWebpage(ctx) || redirectionURL == nil:
+	case isNotRequestingWebpage(ctx) || redirectionURL == nil:
 		statusCode = fasthttp.StatusUnauthorized
 	default:
 		if authn.Object.Method == "" {
@@ -72,7 +72,7 @@ func handleAuthzForbiddenLegacy(ctx *middlewares.AutheliaCtx, authn *Authn, redi
 	}
 
 	switch {
-	case isRequestingWebpage(ctx) || redirectionURL == nil:
+	case isNotRequestingWebpage(ctx) || redirectionURL == nil:
 		statusCode = fasthttp.StatusForbidden
 	default:
 		if authn.Object.Method == "" {

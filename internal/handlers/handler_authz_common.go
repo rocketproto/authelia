@@ -113,7 +113,7 @@ func hasInvalidMethodCharacters(v []byte) bool {
 	return false
 }
 
-func isRequestingWebpage(ctx *middlewares.AutheliaCtx) bool {
+func isNotRequestingWebpage(ctx *middlewares.AutheliaCtx) bool {
 	return ctx.IsXHR() || !ctx.AcceptsMIME("text/html")
 }
 

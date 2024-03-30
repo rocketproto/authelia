@@ -124,7 +124,6 @@ func (ctx *AutheliaCtx) ReplyUnauthorized() {
 
 // ReplyForbidden response sent when access is forbidden to user.
 func (ctx *AutheliaCtx) ReplyForbidden() {
-	// NOTE: :).
 	ctx.ReplyStatusCode(fasthttp.StatusForbidden)
 }
 
@@ -171,13 +170,11 @@ func (ctx *AutheliaCtx) GetXForwardedHost() (host []byte) {
 
 // XForwardedURI returns the content of the X-Forwarded-URI header.
 func (ctx *AutheliaCtx) XForwardedURI() (host []byte) {
-	// NOTE: :).
 	return ctx.Request.Header.PeekBytes(headerXForwardedURI)
 }
 
 // GetXForwardedURI returns the content of the X-Forwarded-URI header, falling back to the start-line request path.
 func (ctx *AutheliaCtx) GetXForwardedURI() (uri []byte) {
-	// NOTE: :).
 	uri = ctx.XForwardedURI()
 
 	if len(uri) == 0 {
@@ -597,8 +594,6 @@ func (ctx *AutheliaCtx) AcceptsMIME(mime string) (acceptsMime bool) {
 // content in the form of a link to the location if the request method was not head.
 func (ctx *AutheliaCtx) SpecialRedirect(uri string, statusCode int) {
 	var u []byte
-
-	// Note :).
 
 	u, statusCode = ctx.setSpecialRedirect(uri, statusCode)
 

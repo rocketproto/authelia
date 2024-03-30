@@ -66,7 +66,7 @@ func (authz *Authz) Handler(ctx *middlewares.AutheliaCtx) {
 		case nil:
 			ctx.ReplyUnauthorized()
 		default:
-			strategy.HandleUnauthorized(ctx, &authn, authz.getLoginRedirectionURL(&object, autheliaURL))
+			strategy.HandleUnauthorized(ctx, &authn, authz.getRedirectionURL(&object, autheliaURL))
 		}
 
 		return
@@ -86,7 +86,7 @@ func (authz *Authz) Handler(ctx *middlewares.AutheliaCtx) {
 
 	switch isAuthzResult(authn.Level, required, ruleHasSubject) {
 	case AuthzResultForbidden:
-		authz.handleForbidden(ctx, &authn, authz.getAccessDeniedRedirection(&object, autheliaURL))
+		authz.handleForbidden(ctx, &authn, authz.getErrorRedirectionURL(&object, autheliaURL, errorForbidden))
 	case AuthzResultUnauthorized:
 		var handler HandlerAuthzUnauthorized
 
@@ -96,7 +96,7 @@ func (authz *Authz) Handler(ctx *middlewares.AutheliaCtx) {
 			handler = authz.handleUnauthorized
 		}
 
-		handler(ctx, &authn, authz.getLoginRedirectionURL(&object, autheliaURL))
+		handler(ctx, &authn, authz.getRedirectionURL(&object, autheliaURL))
 	case AuthzResultAuthorized:
 		authz.handleAuthorized(ctx, &authn)
 	}
@@ -126,12 +126,12 @@ func (authz *Authz) getAutheliaURL(ctx *middlewares.AutheliaCtx, provider *sessi
 	return nil, fmt.Errorf("authelia url lookup failed")
 }
 
-func (authz *Authz) getLoginRedirectionURL(object *authorization.Object, autheliaURL *url.URL) (redirectionURL *url.URL) {
-	if autheliaURL == nil {
+func (authz *Authz) getRedirectionURL(object *authorization.Object, baseURL *url.URL) (redirectionURL *url.URL) {
+	if baseURL == nil {
 		return nil
 	}
 
-	redirectionURL, _ = url.ParseRequestURI(autheliaURL.String())
+	redirectionURL, _ = url.ParseRequestURI(baseURL.String())
 
 	if redirectionURL.Path == "" {
 		redirectionURL.Path = "/"
@@ -150,33 +150,32 @@ func (authz *Authz) getLoginRedirectionURL(object *authorization.Object, autheli
 	return redirectionURL
 }
 
-// refactor to use getRedirectionWithErrorCode
-func (authz *Authz) getAccessDeniedRedirection(object *authorization.Object, autheliaURL *url.URL) (redirectionURL *url.URL) {
-	if autheliaURL == nil {
+func (authz *Authz) getErrorRedirectionURL(object *authorization.Object, baseURL *url.URL, errorString string) (errorRedirectionURL *url.URL) {
+	if baseURL == nil {
 		return nil
 	}
 
-	autheliaDeniedURL, _ := url.ParseRequestURI(autheliaURL.String())
+	baseErrorURL, _ := url.ParseRequestURI(baseURL.String())
 
-	if autheliaDeniedURL.Path == "" {
-		autheliaDeniedURL.Path = "/"
+	if baseErrorURL.Path == "" {
+		baseErrorURL.Path = "/"
 	}
 
-	autheliaDeniedURL.Path += baseErrorPath
+	baseErrorURL.Path += baseErrorPath
 
-	qry := autheliaDeniedURL.Query()
+	qry := baseErrorURL.Query()
 
 	if object.Method != "" {
 		qry.Set(queryArgRM, object.Method)
 	}
 
-	qry.Set(queryArgEC, errorForbidden)
+	qry.Set(queryArgEC, errorString)
 
-	autheliaDeniedURL.RawQuery = qry.Encode()
+	baseErrorURL.RawQuery = qry.Encode()
 
-	redirectionURL = authz.getLoginRedirectionURL(object, autheliaDeniedURL)
+	errorRedirectionURL = authz.getRedirectionURL(object, baseErrorURL)
 
-	return redirectionURL
+	return errorRedirectionURL
 }
 
 func (authz *Authz) authn(ctx *middlewares.AutheliaCtx, provider *session.Session) (authn Authn, strategy AuthnStrategy, err error) {
