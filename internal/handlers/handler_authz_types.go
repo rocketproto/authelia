@@ -37,7 +37,7 @@ type Authz struct {
 // HandlerAuthzUnauthorized is a Authz handler func that handles unauthorized responses.
 type HandlerAuthzUnauthorized func(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL)
 
-// HandlerAuthzUnauthorized is a Authz handler func that handles unauthorized responses.
+// HandlerAuthzForbidden is a Authz handler func that handles forbidden responses.
 type HandlerAuthzForbidden func(ctx *middlewares.AutheliaCtx, authn *Authn, redirectionURL *url.URL)
 
 // HandlerAuthzAuthorized is a Authz handler func that handles authorized responses.

@@ -92,7 +92,7 @@ const BaseErrorView = function () {
 
     return (
         <ComponentOrLoading ready={infoLoaded}>
-            <LoginLayout id="base-error-stage" title={`${translate("Hi")} ${userInfo?.display_name || ""}`} showBrand>
+            <LoginLayout id="base-error-stage" title={`${translate("Hi")} ${userInfo?.display_name || ""}`}>
                 <Grid container>
                     <Grid item xs={12}>
                         <Button color="secondary" onClick={handleLogoutClick} id="logout-button">

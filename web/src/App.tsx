@@ -23,18 +23,9 @@ import ThemeContextProvider from "@contexts/ThemeContext";
 import NotificationsContext from "@hooks/NotificationsContext";
 import { Notification } from "@models/Notifications";
 import { getBasePath } from "@utils/BasePath";
-import {
-    getDuoSelfEnrollment,
-    getRememberMe,
-    getResetPassword,
-    getResetPasswordCustomURL,
-    getTheme,
-} from "@utils/Configuration";
-import RegisterOneTimePassword from "@views/DeviceRegistration/RegisterOneTimePassword";
-import RegisterWebAuthn from "@views/DeviceRegistration/RegisterWebAuthn";
+import { getDuoSelfEnrollment, getRememberMe, getResetPassword, getResetPasswordCustomURL } from "@utils/Configuration";
 import BaseErrorView from "@views/Error/BaseErrorPage";
-import BaseLoadingPage from "@views/LoadingPage/BaseLoadingPage";
-import ConsentView from "@views/LoginPortal/ConsentView/ConsentView";
+import LoadingPage from "@views/LoadingPage/LoadingPage";
 import LoginPortal from "@views/LoginPortal/LoginPortal";
 
 import "@fortawesome/fontawesome-svg-core/styles.css";

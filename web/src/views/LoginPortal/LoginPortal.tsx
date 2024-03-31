@@ -1,4 +1,4 @@
-import React, { Fragment, ReactNode, lazy, useCallback, useEffect, useState } from "react";
+import React, { lazy, useEffect, useState } from "react";
 
 import { useTranslation } from "react-i18next";
 import { Route, Routes, useLocation } from "react-router-dom";
@@ -28,7 +28,6 @@ import { ComponentOrLoading } from "@views/Generic/ComponentOrLoading";
 const AuthenticatedView = lazy(() => import("@views/LoginPortal/AuthenticatedView/AuthenticatedView"));
 const FirstFactorForm = lazy(() => import("@views/LoginPortal/FirstFactor/FirstFactorForm"));
 const SecondFactorForm = lazy(() => import("@views/LoginPortal/SecondFactor/SecondFactorForm"));
-
 
 export interface Props {
     duoSelfEnrollment: boolean;
@@ -220,7 +219,3 @@ const LoginPortal = function (props: Props) {
 };
 
 export default LoginPortal;
-
-function URLSearchParamsHasValues(params?: URLSearchParams) {
-    return params ? !params.entries().next().done : false;
-}

@@ -27,6 +27,8 @@ import LoginLayout from "@layouts/LoginLayout";
 import { ConsentGetResponseBody, acceptConsent, getConsentResponse, rejectConsent } from "@services/Consent";
 import { ComponentOrLoading } from "@views/Generic/ComponentOrLoading";
 
+export interface Props {}
+
 function scopeNameToAvatar(id: string) {
     switch (id) {
         case "openid":
@@ -46,9 +48,7 @@ function scopeNameToAvatar(id: string) {
     }
 }
 
-const ConsentView = function () {
-    const styles = useStyles();
-
+const ConsentView = function (props: Props) {
     const { t: translate } = useTranslation();
 
     const [userInfo, fetchUserInfo, , fetchUserInfoError] = useUserInfoGET();

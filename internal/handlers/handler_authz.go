@@ -93,7 +93,7 @@ func (authz *Authz) Handler(ctx *middlewares.AutheliaCtx) {
 
 	switch isAuthzResult(authn.Level, required, ruleHasSubject) {
 	case AuthzResultForbidden:
-		authz.handleForbidden(ctx, &authn, authz.getErrorRedirectionURL(&object, autheliaURL, errorForbidden))
+		authz.handleForbidden(ctx, authn, authz.getErrorRedirectionURL(&object, autheliaURL, errorForbidden))
 	case AuthzResultUnauthorized:
 		var handler HandlerAuthzUnauthorized
 
@@ -186,7 +186,6 @@ func (authz *Authz) getErrorRedirectionURL(object *authorization.Object, baseURL
 }
 
 func (authz *Authz) authn(ctx *middlewares.AutheliaCtx, provider *session.Session, object *authorization.Object) (authn *Authn, strategy AuthnStrategy, err error) {
-
 	for _, strategy = range authz.strategies {
 		if authn, err = strategy.Get(ctx, provider, object); err != nil {
 			// Ensure an error returned can never result in an authenticated user.
