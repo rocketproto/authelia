@@ -10,7 +10,6 @@ import (
 	fjwt "authelia.com/provider/oauth2/token/jwt"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/ory/herodot"
 
 	"github.com/authelia/authelia/v4/internal/authentication"
 	"github.com/authelia/authelia/v4/internal/authorization"
@@ -23,14 +22,14 @@ import (
 
 // OpenIDConnectProvider for OpenID Connect.
 type OpenIDConnectProvider struct {
-	oauthelia2.Provider
-	*herodot.JSONWriter
 	*Store
 	*Config
 
 	KeyManager *KeyManager
 
 	discovery OpenIDConnectWellKnownConfiguration
+
+	oauthelia2.Provider
 }
 
 // Store is Authelia's internal representation of the oauthelia2.Storage interface. It maps the following
@@ -166,14 +165,20 @@ type RefreshFlowScopeClient interface {
 
 // Context represents the context implementation that is used by some OpenID Connect 1.0 implementations.
 type Context interface {
-	context.Context
-
 	RootURL() (issuerURL *url.URL)
 	IssuerURL() (issuerURL *url.URL, err error)
 	GetClock() (clock clock.Provider)
 	GetRandom() (random random.Provider)
 	GetConfiguration() (config schema.Configuration)
 	GetJWTWithTimeFuncOption() (option jwt.ParserOption)
+
+	context.Context
+}
+
+type ClientContext interface {
+	GetHTTPClient() *http.Client
+
+	context.Context
 }
 
 // ClientRequesterResponder is a oauthelia2.Requster or fosite.Responder with a GetClient method.
@@ -217,11 +222,6 @@ type UserDetailer interface {
 	GetDisplayName() (name string)
 	GetEmails() (emails []string)
 }
-
-// NilErrorReporter is a true nil herodot.ErrorReporter.
-type NilErrorReporter struct{}
-
-func (*NilErrorReporter) ReportError(r *http.Request, code int, err error, args ...interface{}) {}
 
 // ConsentGetResponseBody schema of the response body of the consent GET endpoint.
 type ConsentGetResponseBody struct {
@@ -980,7 +980,8 @@ var (
 	_ oauthelia2.RotatedClientSecretsClient                        = (*RegisteredClient)(nil)
 	_ oauthelia2.ProofKeyCodeExchangeClient                        = (*RegisteredClient)(nil)
 	_ oauthelia2.ClientAuthenticationPolicyClient                  = (*RegisteredClient)(nil)
-	_ oauthelia2.OpenIDConnectClient                               = (*RegisteredClient)(nil)
+	_ oauthelia2.JWTSecuredAuthorizationRequestClient              = (*RegisteredClient)(nil)
+	_ oauthelia2.AuthenticationMethodClient                        = (*RegisteredClient)(nil)
 	_ oauthelia2.RefreshFlowScopeClient                            = (*RegisteredClient)(nil)
 	_ oauthelia2.RevokeFlowRevokeRefreshTokensExplicitClient       = (*RegisteredClient)(nil)
 	_ oauthelia2.JARMClient                                        = (*RegisteredClient)(nil)
@@ -989,4 +990,5 @@ var (
 	_ oauthelia2.ClientCredentialsFlowRequestedScopeImplicitClient = (*RegisteredClient)(nil)
 	_ oauthelia2.RequestedAudienceImplicitClient                   = (*RegisteredClient)(nil)
 	_ oauthelia2.JWTProfileClient                                  = (*RegisteredClient)(nil)
+	_ oauthelia2.IntrospectionJWTResponseClient                    = (*RegisteredClient)(nil)
 )

@@ -50,6 +50,10 @@ const (
 )
 
 const (
+	ClaimTypeNormal = "normal"
+)
+
+const (
 	lifespanTokenDefault                      = time.Hour
 	lifespanRefreshTokenDefault               = time.Hour * 24 * 30
 	lifespanAuthorizeCodeDefault              = time.Minute * 15
@@ -153,6 +157,10 @@ const (
 const (
 	PKCEChallengeMethodPlain  = "plain"
 	PKCEChallengeMethodSHA256 = "S256"
+)
+
+const (
+	RedirectURISpecialOAuth2InstalledApp = "urn:ietf:wg:oauth:2.0:oob"
 )
 
 const (

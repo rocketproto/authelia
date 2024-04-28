@@ -16,6 +16,26 @@ seo:
 
 Authelia has several methods where users can interact with templates.
 
+## Enable Templating
+
+By default the [Notification Templates](./notification-templates.md) have templating enabled. To enable templating in configuration files, set the environment variable `X_AUTHELIA_CONFIG_FILTERS` to `template`. For more information see
+[Configuration > Methods > Files: File Filters](../../configuration/methods/files.md#file-filters).
+
+## Validation / Debugging
+
+### Notifications
+
+No specific method exists at this time to validate these templates, however a bad template may cause an error before
+startup.
+
+### Configuration
+
+Two methods exist to validate the config template output:
+
+1. The [authelia config template](../cli/authelia/authelia_config_template.md) command.
+2. The [log level](../../configuration/miscellaneous/logging.md#level) value of `trace` will output the fully rendered
+   configuration as a base64 string.
+
 ## Functions
 
 Functions can be used to perform specific actions when executing templates. The following is a simple guide on which
@@ -111,7 +131,7 @@ This template function takes a single input and is a string which should be a pa
 
 Example:
 
-```yaml
+```yaml {title="configuration.yml"}
 example: |
   {{- fileContent "/absolute/path/to/file" | nindent 2 }}
 ```
@@ -122,7 +142,7 @@ Overload for [fileContent](#filecontent) except that tailing newlines will be re
 
 ##### secret example
 
-```yaml
+```yaml {title="configuration.yml"}
 example: '{{ secret "/absolute/path/to/file" }}'
 ```
 
@@ -135,20 +155,20 @@ formatting string provided. Input is in the format of `(int, string, string)`.
 
 Input:
 
-```yaml
+```yaml {title="configuration.yml"}
 example: {{ secret "/absolute/path/to/file" | mindent 2 "|" | msquote }}
 ```
 
 Output (with multiple lines):
 
-```yaml
+```yaml {title="configuration.yml"}
 example: |
   <content of "/absolute/path/to/file">
 ```
 
 Output (without multiple lines):
 
-```yaml
+```yaml {title="configuration.yml"}
 example: '<content of "/absolute/path/to/file">'
 ```
 

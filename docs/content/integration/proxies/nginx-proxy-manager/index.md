@@ -70,11 +70,8 @@ following are the assumptions we make:
 
 The following docker compose example has various applications suitable for setting up an example environment.
 
-{{< details "docker-compose.yml" >}}
-```yaml
+```yaml {title="docker-compose.yml"}
 ---
-version: "3.8"
-
 networks:
   net:
     driver: 'bridge'
@@ -139,7 +136,6 @@ services:
       TZ: 'Australia/Melbourne'
 ...
 ```
-{{< /details >}}
 
 ## Configuration
 

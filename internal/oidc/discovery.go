@@ -116,7 +116,9 @@ func NewOpenIDConnectWellKnownConfiguration(c *schema.IdentityProvidersOpenIDCon
 				},
 				IntrospectionEndpointAuthMethodsSupported: []string{
 					ClientAuthMethodClientSecretBasic,
-					ClientAuthMethodNone,
+					ClientAuthMethodClientSecretPost,
+					ClientAuthMethodClientSecretJWT,
+					ClientAuthMethodPrivateKeyJWT,
 				},
 			},
 			OAuth2JWTIntrospectionResponseDiscoveryOptions: &OAuth2JWTIntrospectionResponseDiscoveryOptions{
@@ -153,6 +155,9 @@ func NewOpenIDConnectWellKnownConfiguration(c *schema.IdentityProvidersOpenIDCon
 				SigningAlgRSAPSSUsingSHA384,
 				SigningAlgRSAPSSUsingSHA512,
 				SigningAlgNone,
+			},
+			ClaimTypesSupported: []string{
+				ClaimTypeNormal,
 			},
 			RequestParameterSupported:     true,
 			RequestURIParameterSupported:  true,

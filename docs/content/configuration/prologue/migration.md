@@ -30,12 +30,17 @@ be represented in [YAML] as a dictionary i.e. it's indented.
 
 In our table `server.host` with a value of `0.0.0.0` is represented in [YAML] like this:
 
-```yaml
+```yaml {title="configuration.yml"}
 server:
   host: '0.0.0.0'
 ```
 
 ## Migrations
+
+### 4.38.0
+
+No information currently exists for this version at this time with the exclusion of the
+[blog article](../../blog/release-notes-4.38/index.md). We would welcome the contribution.
 
 ### 4.36.0
 
