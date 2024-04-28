@@ -11,13 +11,13 @@ export default defineConfig(({ command, mode }) => {
 
     const istanbulPlugin = isCoverage
         ? istanbul({
-            checkProd: false,
-            exclude: ["node_modules"],
-            extension: [".js", ".jsx", ".ts", ".tsx"],
-            forceBuildInstrument: true,
-            include: "src/*",
-            requireEnv: true,
-        })
+              checkProd: false,
+              exclude: ["node_modules"],
+              extension: [".js", ".jsx", ".ts", ".tsx"],
+              forceBuildInstrument: true,
+              include: "src/*",
+              requireEnv: true,
+          })
         : undefined;
 
     const config: UserConfig = {
@@ -91,7 +91,6 @@ export default defineConfig(({ command, mode }) => {
         server: {
             open: false,
             port: 3000,
-
         },
         test: {
             coverage: {
@@ -113,27 +112,26 @@ export default defineConfig(({ command, mode }) => {
         ],
     };
 
-    if (command === 'serve') {
-        config.plugins?.push(injectDevHomeLinkToIndex())
+    if (command === "serve") {
+        config.plugins?.push(injectDevHomeLinkToIndex());
     }
 
-    return config
+    return config;
 });
 
 const injectDevHomeLinkToIndex: () => PluginOption = () => {
     return {
-        name: 'html-transform',
+        name: "html-transform",
         transformIndexHtml(html: string) {
-
             const injectedHomeLinkHtml: string = `
             <a style="position:absolute; height: 30px; z-index: 99; top: 0px;
                     left: 0px; background-color: white;" href="https://home.example.com:8080">
                 <b> &#127968; Demo Home</b>
             </a>`;
 
-            const htmlArray = html.split('</body>');
+            const htmlArray = html.split("</body>");
 
-            return htmlArray[0] + injectedHomeLinkHtml + '</body>' + htmlArray[1]
-        }
-    }
-}
+            return htmlArray[0] + injectedHomeLinkHtml + "</body>" + htmlArray[1];
+        },
+    };
+};
