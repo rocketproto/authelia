@@ -1,5 +1,5 @@
-#!/bin/sh
+# #!/bin/sh
 
-. "${0%/*}/required-apps"
+# . "${0%/*}/required-apps"
 
-cd web && ${PMGR_EXEC} commitlint --edit "$1"
+# cd web && ${PMGR_EXEC} commitlint --edit "$1"
